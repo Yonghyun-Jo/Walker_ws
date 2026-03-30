@@ -370,6 +370,23 @@ void CustomController::computeFast()
 
         processObservation();
         feedforwardPolicy();
+
+        // Dump first obs for offline verification
+        {
+            ofstream dump("/tmp/walker_cc_first_obs.txt");
+            dump << std::fixed << std::setprecision(8);
+            dump << "# policy_obs_history (235D, term-major)\n";
+            for (int i = 0; i < policy_obs_dim_; i++)
+                dump << input_states_buffer[input_policy_idx_][i] << "\n";
+            dump << "# policy_frame (47D, single frame)\n";
+            for (int i = 0; i < num_single_obs; i++)
+                dump << policy_frame_[i] << "\n";
+            dump << "# rl_action (12D)\n";
+            for (int i = 0; i < num_action; i++)
+                dump << rl_action_(i) << "\n";
+            dump.close();
+            cout << "[p73_walker_cc] First obs dumped to /tmp/walker_cc_first_obs.txt" << endl;
+        }
     }
 
     // Policy update at 50Hz
