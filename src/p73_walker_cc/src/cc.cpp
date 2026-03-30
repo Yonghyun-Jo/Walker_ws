@@ -4,25 +4,19 @@
 #include <numeric>
 
 // =====================================================================
-// Joint order permutation helpers
+// NOTE on joint ordering:
+//
+// SHM data (from MuJoCo via launch joint_names) is in MuJoCo/IsaacLab order:
+//   L_HipRoll, L_HipPitch, L_HipYaw, L_Knee, L_AnklePitch, L_AnkleRoll,
+//   R_HipRoll, R_HipPitch, R_HipYaw, R_Knee, R_AnklePitch, R_AnkleRoll,
+//   WaistYaw
+//
+// This is the SAME order as IsaacLab _LOWER_JOINT_NAMES and MuJoCo XML actuators.
+// Therefore NO permutation is needed — data flows directly.
+//
+// P73 code (p73.h JOINT_NAME) uses a different order (Yaw,Roll,Pitch),
+// but that only matters for p73_controller task modes 0-4, NOT for cc.
 // =====================================================================
-namespace {
-using Vec12 = Eigen::Matrix<double, 12, 1>;
-
-// P73 lower 12 joints → IsaacLab order
-inline Vec12 p73_to_isaac(const Eigen::VectorXd &p73_13, const std::array<int, 12> &map) {
-    Vec12 isaac;
-    for (int i = 0; i < 12; ++i)
-        isaac(map[i]) = p73_13(i);
-    return isaac;
-}
-
-// IsaacLab 12 actions → P73 lower 12 indices
-inline void isaac_to_p73(const Vec12 &isaac, Eigen::VectorXd &p73_13, const std::array<int, 12> &map) {
-    for (int i = 0; i < 12; ++i)
-        p73_13(map[i]) = isaac(i);
-}
-}  // namespace
 
 // =====================================================================
 // Constructor
@@ -46,54 +40,47 @@ CustomController::CustomController(DataContainer &dc, RobotEigenData &rd)
 }
 
 // =====================================================================
-// initVariable
+// initVariable — ALL values in MuJoCo/IsaacLab order (Roll, Pitch, Yaw)
 // =====================================================================
 void CustomController::initVariable()
 {
     cout << "[p73_walker_cc] Initializing variables" << endl;
 
-    // --- Default joint positions in P73 order (from p73_walker.py asset config) ---
-    // P73:  L_HipYaw, L_HipRoll, L_HipPitch, L_Knee, L_AnklePitch, L_AnkleRoll,
-    //       R_HipYaw, R_HipRoll, R_HipPitch, R_Knee, R_AnklePitch, R_AnkleRoll,
-    //       WaistYaw
-    q_default_p73_ <<  0.0,   0.0,  0.36,  0.77, -0.41, 0.0,    // L leg
-                       0.0,   0.0, -0.36, -0.77,  0.41, 0.0,    // R leg
-                       0.0;                                       // WaistYaw
+    // --- Default joint positions in MuJoCo/IsaacLab order (13D) ---
+    // MuJoCo/Isaac: L_HipRoll, L_HipPitch, L_HipYaw, L_Knee, L_AnklePitch, L_AnkleRoll,
+    //               R_HipRoll, R_HipPitch, R_HipYaw, R_Knee, R_AnklePitch, R_AnkleRoll,
+    //               WaistYaw
+    q_default_p73_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,    // L leg (Roll,Pitch,Yaw,Knee,AnkleP,AnkleR)
+                       0.0, -0.36, 0.0, -0.77,  0.41, 0.0,    // R leg
+                       0.0;                                      // WaistYaw
 
-    // --- Default joint positions in IsaacLab lower body order (12) ---
-    // Isaac: L_HipRoll, L_HipPitch, L_HipYaw, L_Knee, L_AnklePitch, L_AnkleRoll,
-    //        R_HipRoll, R_HipPitch, R_HipYaw, R_Knee, R_AnklePitch, R_AnkleRoll
+    // --- Default joint positions for lower 12 only (IsaacLab order) ---
     q_default_isaac_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,    // L leg
                          0.0, -0.36, 0.0, -0.77,  0.41, 0.0;    // R leg
 
-    // --- PD gains in P73 order (from ActionsCfg, permuted to P73 order) ---
-    // ActionsCfg p_gains (IsaacLab order): [1536, 937.5, 625, 747.552, 490.644, 490.104,
-    //                                       1536, 937.5, 625, 747.552, 490.644, 490.104, 576]
-    kp_p73_ << 625.0, 1536.0, 937.5, 747.552, 490.644, 490.104,   // L leg (P73 order)
-               625.0, 1536.0, 937.5, 747.552, 490.644, 490.104,   // R leg (P73 order)
+    // --- PD gains in MuJoCo/IsaacLab order (13D) ---
+    // ActionsCfg p_gains: [1536, 937.5, 625, 747.552, 490.644, 490.104, ... , 576]
+    kp_p73_ << 1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,   // L leg (Roll,Pitch,Yaw)
+               1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,   // R leg
                576.0;                                               // WaistYaw
 
-    // ActionsCfg d_gains (IsaacLab order): [76.8, 37.5, 12.5, 37.378, 16.355, 16.337,
-    //                                       76.8, 37.5, 12.5, 37.378, 16.355, 16.337, 19.2]
-    kd_p73_ << 12.5, 76.8, 37.5, 37.378, 16.355, 16.337,   // L leg (P73 order)
-               12.5, 76.8, 37.5, 37.378, 16.355, 16.337,    // R leg (P73 order)
+    // ActionsCfg d_gains: [76.8, 37.5, 12.5, 37.378, 16.355, 16.337, ... , 19.2]
+    kd_p73_ << 76.8, 37.5, 12.5, 37.378, 16.355, 16.337,   // L leg (Roll,Pitch,Yaw)
+               76.8, 37.5, 12.5, 37.378, 16.355, 16.337,    // R leg
                19.2;                                          // WaistYaw
 
-    // --- Torque limits in P73 order (N*m) ---
+    // --- Torque limits in MuJoCo/IsaacLab order (13D, N*m) ---
     // ActionsCfg: [352, 220, 95, 220, 95, 95, 352, 220, 95, 220, 95, 95, 152]
-    torque_bound_p73_ << 95.0, 352.0, 220.0, 220.0, 95.0, 95.0,   // L leg (P73 order)
-                         95.0, 352.0, 220.0, 220.0, 95.0, 95.0,    // R leg (P73 order)
+    torque_bound_p73_ << 352.0, 220.0, 95.0, 220.0, 95.0, 95.0,   // L leg (Roll,Pitch,Yaw)
+                         352.0, 220.0, 95.0, 220.0, 95.0, 95.0,    // R leg
                          152.0;                                      // WaistYaw
 
-    // --- Joint position limits in P73 order (for q_des clamping) ---
-    // IsaacLab clamps: q_des = clamp(q_des, lower_lim, upper_lim)
-    // Isaac order: [(-0.58,0.3), (-1.57,2.09), (-0.78,0.78), (0.0,2.56), (-1.05,0.7), (-0.42,0.42),
-    //              (-0.58,0.3), (-2.09,1.57), (-0.78,0.78), (-2.56,0.0), (-0.7,1.05), (-0.42,0.42)]
-    // Permuted to P73 order:
-    q_limit_lower_p73_ << -0.78, -0.58, -1.57,  0.0,  -1.05, -0.42,   // L leg
-                          -0.78, -0.58, -2.09, -2.56, -0.7,  -0.42;    // R leg
-    q_limit_upper_p73_ <<  0.78,  0.3,   2.09,  2.56,  0.7,   0.42,   // L leg
-                           0.78,  0.3,   1.57,  0.0,   1.05,  0.42;    // R leg
+    // --- Joint position limits in IsaacLab order (lower 12 only, for q_des clamping) ---
+    // From rough_env_cfg.py ActionsCfg joint_pos_limits (IsaacLab order):
+    q_limit_lower_p73_ << -0.58, -1.57, -0.78,  0.0,  -1.05, -0.42,   // L leg
+                          -0.58, -2.09, -0.78, -2.56, -0.7,  -0.42;    // R leg
+    q_limit_upper_p73_ <<  0.3,   2.09,  0.78,  2.56,  0.7,   0.42,   // L leg
+                           0.3,   1.57,  0.78,  0.0,   1.05,  0.42;    // R leg
 
     // --- Buffers ---
     rl_action_.setZero();
@@ -205,6 +192,8 @@ void CustomController::loadOnnX()
 
 // =====================================================================
 // processObservation - Build 47D policy frame and update term-major history
+//
+// SHM data is already in IsaacLab order — NO permutation needed.
 // =====================================================================
 void CustomController::processObservation()
 {
@@ -232,16 +221,12 @@ void CustomController::processObservation()
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
 
-    // Joint pos/vel in P73 order (lower 12 joints)
+    // Joint pos/vel — SHM is already in MuJoCo/IsaacLab order, use directly
     // Joints start at index 7 in q_virtual_ (after pos3 + quat4)
     // Joints start at index 6 in q_dot_virtual_ (after lin_vel3 + ang_vel3)
-    VectorXd q_pos_p73 = rd_cc_.q_virtual_.segment<12>(7);
-    VectorXd q_vel_p73 = rd_cc_.q_dot_virtual_.segment<12>(6);
-
-    // Permute to IsaacLab order
-    Vec12 q_pos_isaac = p73_to_isaac(q_pos_p73, kP73ToIsaac);
-    Vec12 q_vel_isaac = p73_to_isaac(q_vel_p73, kP73ToIsaac);
-    Vec12 q_pos_rel_isaac = q_pos_isaac - q_default_isaac_;
+    VectorXd q_pos = rd_cc_.q_virtual_.segment<12>(7);    // already IsaacLab order
+    VectorXd q_vel = rd_cc_.q_dot_virtual_.segment<12>(6); // already IsaacLab order
+    VectorXd q_pos_rel = q_pos - q_default_isaac_.cast<double>();
 
     // Read velocity commands (thread-safe)
     double local_vel_x, local_vel_y, local_vel_yaw;
@@ -252,11 +237,10 @@ void CustomController::processObservation()
         local_vel_yaw = target_vel_yaw_;
     }
 
-    // Gait phase (use same velocity as obs, not subscriber values)
-    const double obs_vel_x = 0.5, obs_vel_y = 0.0, obs_vel_yaw = 0.0;  // must match obs below
-    double cmd_norm = std::sqrt(obs_vel_x * obs_vel_x +
-                                obs_vel_y * obs_vel_y +
-                                obs_vel_yaw * obs_vel_yaw);
+    // Gait phase
+    double cmd_norm = std::sqrt(local_vel_x * local_vel_x +
+                                local_vel_y * local_vel_y +
+                                local_vel_yaw * local_vel_yaw);
     double phase = 0.0;
     if (cmd_norm > cmd_zero_max_) {
         phase = static_cast<double>(gait_step_counter_ % gait_period_steps_) /
@@ -278,10 +262,10 @@ void CustomController::processObservation()
     policy_frame_[idx++] = static_cast<float>(projected_gravity_b(1));
     policy_frame_[idx++] = static_cast<float>(projected_gravity_b(2));
 
-    // velocity_commands (3) — hardcoded for testing, use local_vel_* for teleop
-    policy_frame_[idx++] = 0.5f;  // local_vel_x
-    policy_frame_[idx++] = 0.0f;  // local_vel_y
-    policy_frame_[idx++] = 0.0f;  // local_vel_yaw
+    // velocity_commands (3) — from ROS2 subscriber
+    policy_frame_[idx++] = static_cast<float>(local_vel_x);
+    policy_frame_[idx++] = static_cast<float>(local_vel_y);
+    policy_frame_[idx++] = static_cast<float>(local_vel_yaw);
 
     // gait_phase_sin (1)
     policy_frame_[idx++] = static_cast<float>(gait_sin);
@@ -289,32 +273,27 @@ void CustomController::processObservation()
     // gait_phase_cos (1)
     policy_frame_[idx++] = static_cast<float>(gait_cos);
 
-    // motor_joint_pos relative to default (12, IsaacLab order)
+    // motor_joint_pos relative to default (12, already IsaacLab order)
     for (int i = 0; i < 12; i++)
-        policy_frame_[idx++] = static_cast<float>(q_pos_rel_isaac(i));
+        policy_frame_[idx++] = static_cast<float>(q_pos_rel(i));
 
-    // motor_joint_vel (12, IsaacLab order)
+    // motor_joint_vel (12, already IsaacLab order)
     for (int i = 0; i < 12; i++)
-        policy_frame_[idx++] = static_cast<float>(q_vel_isaac(i));
+        policy_frame_[idx++] = static_cast<float>(q_vel(i));
 
     // last_action (12, processed = raw * scale)
     for (int i = 0; i < num_action; i++)
         policy_frame_[idx++] = static_cast<float>(last_action_processed_(i));
 
     // === Update term-major history buffer ===
-    // IsaacLab ObservationManager layout (term-major):
-    //   [ang_vel(3*H), gravity(3*H), cmd(3*H), sin(1*H), cos(1*H),
-    //    joint_pos(12*H), joint_vel(12*H), last_action(12*H)]
     const int H = history_length_;
 
-    // Term dimensions and offsets
     constexpr int dims[] = {3, 3, 3, 1, 1, 12, 12, 12};  // = 47
     int offsets[8];
     offsets[0] = 0;
     for (int t = 1; t < 8; t++)
         offsets[t] = offsets[t - 1] + dims[t - 1] * H;
 
-    // Frame offsets within policy_frame_
     int frame_offsets[8];
     frame_offsets[0] = 0;
     for (int t = 1; t < 8; t++)
@@ -357,21 +336,17 @@ void CustomController::processObservation()
         Vector3d lin_vel_w = rd_cc_.q_dot_virtual_.segment<3>(0);
         Vector3d lin_vel_b = quatRotateInverse(q, lin_vel_w);
 
-        // gt_vel3 = [vx_b, vy_b, wz_b]
         critic_in[0] = static_cast<float>(lin_vel_b(0));
         critic_in[1] = static_cast<float>(lin_vel_b(1));
         critic_in[2] = static_cast<float>(ang_vel_b(2));
 
-        // gt_foot_force6 = zeros (contact forces not available in simple deployment)
         for (int i = 3; i < 9; i++)
             critic_in[i] = 0.0f;
 
-        // Copy policy single frame (47D)
         if (critic_in.size() >= static_cast<size_t>(9 + num_single_obs))
             std::memcpy(critic_in.data() + 9, policy_frame_.data(), sizeof(float) * num_single_obs);
     }
 
-    // Increment gait step counter
     gait_step_counter_++;
 }
 
@@ -404,13 +379,15 @@ void CustomController::feedforwardPolicy()
     }
 
     // Update last_action_processed for next observation
-    // last_processed_action in IsaacLab = raw_action * scale (clipped)
     for (int i = 0; i < num_action; i++)
         last_action_processed_(i) = DyrosMath::minmax_cut(rl_action_(i) * action_scale_, -1.0, 1.0);
 }
 
 // =====================================================================
 // computeFast - Main control loop (called from TaskCtrlThread at ~2kHz)
+//
+// SHM data and d->ctrl[] are both in MuJoCo/IsaacLab order.
+// All computation here is in that same order — NO permutation.
 // =====================================================================
 void CustomController::computeFast()
 {
@@ -420,12 +397,14 @@ void CustomController::computeFast()
     if (debug_counter++ % 2000 == 0) {
         cout << "[p73_walker_cc] task_mode=" << dc_.task_cmd_.task_mode
              << " tc_mode=" << dc_.tc_mode << " cc_init=" << cc_init_
-             << " simMode=" << dc_.simMode << endl;
+             << " simMode=" << dc_.simMode
+             << " time_us=" << rd_cc_.control_time_us_ << endl;
         if (dc_.task_cmd_.task_mode >= 5 && dc_.task_cmd_.task_mode < 10) {
             cout << "[p73_walker_cc] action: " << rl_action_.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
             cout << "[p73_walker_cc] torque: " << rd_.torque_desired.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
             VectorXd q_pos = rd_cc_.q_virtual_.segment<MODEL_DOF>(7);
             cout << "[p73_walker_cc] q_pos:  " << q_pos.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
+            cout << "[p73_walker_cc] q_def:  " << q_default_p73_.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
         }
     }
 
@@ -461,32 +440,26 @@ void CustomController::computeFast()
             time_inference_pre_ = rd_cc_.control_time_us_;
         }
 
-        // === Action → Target Position → PD → Torque ===
-        // IsaacLab: q_des = q_default + raw_action * scale (clipped to [-1,1])
-        // PD gains applied directly (no /9 or /3 scaling, unlike tocabi)
-        Vec12 delta_q_isaac;
+        // === Action → Target Position → PD → Torque (all in MuJoCo/IsaacLab order) ===
+        // ONNX output is in IsaacLab order (12D)
+        // q_des = q_default + clamp(action * scale, -1, 1)
+        VectorQd target_pos = q_default_p73_;  // 13D, MuJoCo/IsaacLab order
         for (int i = 0; i < num_action; i++) {
             double dq = rl_action_(i) * action_scale_;  // scale = 0.5
-            delta_q_isaac(i) = DyrosMath::minmax_cut(dq, -1.0, 1.0);
-        }
-
-        // Convert to P73 order and compute PD torque for lower 12 joints
-        VectorQd target_pos = q_default_p73_;
-        VectorXd delta_p73 = VectorXd::Zero(12);
-        isaac_to_p73(delta_q_isaac, delta_p73, kIsaacToP73);
-        for (int i = 0; i < 12; i++) {
-            target_pos(i) = q_default_p73_(i) + delta_p73(i);
-            // Clamp q_des to joint limits (matches IsaacLab action clamping)
+            dq = DyrosMath::minmax_cut(dq, -1.0, 1.0);
+            target_pos(i) = q_default_p73_(i) + dq;
+            // Clamp q_des to joint limits (matches IsaacLab)
             target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
         }
+        // WaistYaw (index 12) stays at default — already set from q_default_p73_
 
-        // PD torque for all 13 joints (WaistYaw held at default by PD)
-        VectorXd q_pos_p73 = rd_cc_.q_virtual_.segment<MODEL_DOF>(7);
-        VectorXd q_vel_p73 = rd_cc_.q_dot_virtual_.segment<MODEL_DOF>(6);
+        // PD torque — SHM joint data is already in MuJoCo/IsaacLab order
+        VectorXd q_pos = rd_cc_.q_virtual_.segment<MODEL_DOF>(7);
+        VectorXd q_vel = rd_cc_.q_dot_virtual_.segment<MODEL_DOF>(6);
 
         for (int i = 0; i < MODEL_DOF; i++) {
-            torque_rl_(i) = kp_p73_(i) * (target_pos(i) - q_pos_p73(i))
-                          - kd_p73_(i) * q_vel_p73(i);
+            torque_rl_(i) = kp_p73_(i) * (target_pos(i) - q_pos(i))
+                          - kd_p73_(i) * q_vel(i);
             torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
                             -torque_bound_p73_(i), torque_bound_p73_(i));
         }

@@ -79,9 +79,17 @@ StateEstimator::StateEstimator(DataContainer &dc)
 
     // Wait for system to become operational
     cout << "\nWaiting for system to become operational..." << endl;
+    int wait_count = 0;
     while (true && rclcpp::ok())
     {
         robot_data = robot.get_data();
+        if (wait_count % 1000 == 0) {
+            cout << " STATE : waiting... joint.valid=" << robot_data.joint.valid
+                 << " system_status=" << robot_data.joint.system_status
+                 << " (need " << ECAT_OPERATIONAL << ")"
+                 << " imu.valid=" << robot_data.imu.valid << endl;
+        }
+        wait_count++;
         if (robot_data.joint.valid && robot_data.joint.system_status == ECAT_OPERATIONAL && robot_data.imu.valid)
         {
             cout << "System is operational!" << endl;
@@ -379,8 +387,11 @@ void StateEstimator::GetRobotData()
         // std::cout << std::defaultfloat;
         // std::cout << " " << std::endl;
 
-        q_virtual_local_.segment(7, MODEL_DOF) = q_;
-        q_dot_virtual_local_.segment(6, MODEL_DOF) = q_dot_;  
+        // Map code order (MuJoCo) → Pinocchio order for kinematics
+        for (int i = 0; i < MODEL_DOF; i++) {
+            q_virtual_local_(7 + P73::PINOCCHIO_IDX_FOR_CODE[i]) = q_(i);
+            q_dot_virtual_local_(6 + P73::PINOCCHIO_IDX_FOR_CODE[i]) = q_dot_(i);
+        }  
 
         if (dc_.useMjcVirtual)
         {
@@ -692,14 +703,28 @@ void StateEstimator::StoreState(RobotEigenData &rd_global_)
     memcpy(&rd_global_.q_motor_, &q_motor_, sizeof(VectorQd));
     memcpy(&rd_global_.q_dot_motor_, &q_dot_motor_, sizeof(VectorQd));
     memcpy(&rd_global_.q_torque_, &q_torque_, sizeof(VectorQd));
-    memcpy(&rd_global_.q_virtual_, &q_virtual_, sizeof(VectorQVQd));
-    memcpy(&rd_global_.q_dot_virtual_, &q_dot_virtual_, sizeof(VectorVQd));
+
+    // q_virtual_ is in Pinocchio order (for kinematics).
+    // rd_global_.q_virtual_ must be in code order (MuJoCo/IsaacLab) for cc and controller.
+    // Copy base pos(3) + quat(4) directly, remap joint(13) from Pinocchio→code order.
+    {
+        VectorQVQd q_virtual_code = q_virtual_;
+        VectorVQd q_dot_virtual_code = q_dot_virtual_;
+        // Joints: q_virtual_[7+pin_idx] → q_virtual_code[7+code_idx]
+        for (int i = 0; i < MODEL_DOF; i++) {
+            q_virtual_code(7 + i) = q_virtual_(7 + P73::PINOCCHIO_IDX_FOR_CODE[i]);
+            q_dot_virtual_code(6 + i) = q_dot_virtual_(6 + P73::PINOCCHIO_IDX_FOR_CODE[i]);
+        }
+        memcpy(&rd_global_.q_virtual_, &q_virtual_code, sizeof(VectorQVQd));
+        memcpy(&rd_global_.q_dot_virtual_, &q_dot_virtual_code, sizeof(VectorVQd));
+    }
 
     rd_global_.roll = rd_.roll;
     rd_global_.pitch = rd_.pitch;
     rd_global_.yaw = rd_.yaw;
 
     rd_global_.control_time_ = control_time_;
+    rd_global_.control_time_us_ = static_cast<int64_t>(control_time_ * 1e6);
 
     if (!rd_global_.firstCalc)
     {

@@ -121,7 +121,7 @@ void controlCallback(const mjModel* m, mjData* d) {
         // }
     }
     joint_status.system_status = ECAT_OPERATIONAL;
-    if (joint_command.system_command == CONTROL_COMMAND) 
+    if (joint_command.system_command == CONTROL_COMMAND)
         joint_status.system_status = ECAT_CONTROL;
     spsc_joint_status_push(joint_status_buffer, &joint_status);
     spsc_imu_status_push(imu_status_buffer, &imu_status);

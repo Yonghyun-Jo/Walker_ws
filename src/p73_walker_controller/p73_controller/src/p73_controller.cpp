@@ -555,6 +555,9 @@ void P73Controller::taskCmdCallback(const p73_msgs::msg::TaskCmd::SharedPtr msg)
     dc_.tc_mode = true;
     dc_.ik_mode = false;
     dc_.task_cmd_ = *msg;
+#ifdef COMPILE_P73_CC
+    cc_.cc_init_ = true;  // Reset CC so it re-initializes on next mode entry
+#endif
     cout << "CNTRL : task signal received mode :" << dc_.task_cmd_.task_mode << endl;
     stm_.StatusPub("CNTRL : task Control mode : %d", dc_.task_cmd_.task_mode);
 }
