@@ -180,8 +180,9 @@ void CustomController::processObservation()
     q.z() = rd_.q_virtual_(5);
     q.w() = rd_.q_virtual_(6);
 
-    Vector3d ang_vel_w = rd_.q_dot_virtual_.segment<3>(3);
-    Vector3d ang_vel_b = quatRotateInverse(q, ang_vel_w);
+    // MuJoCo gyro sensor outputs body-frame angular velocity directly.
+    // NO rotation needed (unlike TOCABI which uses d->qvel world-frame).
+    Vector3d ang_vel_b = rd_.q_dot_virtual_.segment<3>(3);
 
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
