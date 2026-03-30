@@ -318,58 +318,45 @@ void CustomController::computeFast()
 {
     float control_time_us = rd_.control_time_us_;
 
-    if (cc_init_)
-    {
-        cc_init_ = false;
-        cout << "[p73_walker_cc] Mode " << dc_.task_cmd_.task_mode << " started." << endl;
+    static bool init = true;
+    if (init) {
+        init = false;
         start_time_ = control_time_us;
         torque_init_ = rd_.torque_desired;
         time_inference_pre_ = control_time_us - policy_dt_ * 1e6;
-        last_pd_us_ = control_time_us;
-
         rl_action_.setZero();
         last_action_processed_.setZero();
         gait_step_counter_ = 0;
         policy_hist_initialized_ = false;
         std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
+        cout << "[p73_walker_cc] Mode started." << endl;
 
         processObservation();
         feedforwardPolicy();
     }
 
-    // === Policy update at 50Hz ===
+    // Policy update at 50Hz
     if ((control_time_us - time_inference_pre_) / 1.0e6 >= policy_dt_) {
         processObservation();
         feedforwardPolicy();
         time_inference_pre_ = control_time_us;
     }
 
-    // === PD update at 200Hz (match IsaacLab physics dt=0.005s) ===
-    // Between PD updates, hold the last torque (same as IsaacLab: set_joint_effort_target is held)
-    const bool do_pd = (control_time_us - last_pd_us_) / 1.0e6 >= pd_dt_;
-    if (do_pd) {
-        last_pd_us_ = control_time_us;
-
-        // Action → Target Position
-        VectorQd target_pos = q_default_p73_;
-        for (int i = 0; i < num_action; i++) {
-            double dq = rl_action_(i) * action_scale_;
-            dq = DyrosMath::minmax_cut(dq, -1.0, 1.0);
-            target_pos(i) = q_default_p73_(i) + dq;
-            target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
-        }
-
-        // PD torque
-        for (int i = 0; i < MODEL_DOF; i++) {
-            torque_rl_(i) = kp_p73_(i) * (target_pos(i) - rd_.q_(i))
-                          - kd_p73_(i) * rd_.q_dot_(i);
-            torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
-                            -torque_bound_p73_(i), torque_bound_p73_(i));
-        }
+    // Action → Target Position → PD (every tick, no 200Hz hold)
+    VectorQd target_pos = q_default_p73_;
+    for (int i = 0; i < num_action; i++) {
+        double dq = rl_action_(i) * action_scale_;
+        dq = DyrosMath::minmax_cut(dq, -1.0, 1.0);
+        target_pos(i) = q_default_p73_(i) + dq;
+        target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
     }
-    // else: hold previous torque_rl_ (rd_.torque_desired not updated)
+    for (int i = 0; i < MODEL_DOF; i++) {
+        torque_rl_(i) = kp_p73_(i) * (target_pos(i) - rd_.q_(i))
+                      - kd_p73_(i) * rd_.q_dot_(i);
+        torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
+                        -torque_bound_p73_(i), torque_bound_p73_(i));
+    }
 
-    // === Output torque ===
     // Spline transition for first 100ms
     if (control_time_us < start_time_ + 0.1e6) {
         for (int i = 0; i < MODEL_DOF; i++)
