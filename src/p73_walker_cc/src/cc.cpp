@@ -243,8 +243,11 @@ void CustomController::processObservation()
     policy_frame_[idx++] = static_cast<float>(gait_cos);
     for (int i = 0; i < 12; i++)
         policy_frame_[idx++] = static_cast<float>(q_pos_rel(i));
-    for (int i = 0; i < 12; i++)
-        policy_frame_[idx++] = static_cast<float>(q_vel(i));
+    for (int i = 0; i < 12; i++) {
+        // Match IsaacLab ObsTerm(clip=(-30,30), scale=1/30)
+        double v_clip = DyrosMath::minmax_cut(q_vel(i), -30.0, 30.0);
+        policy_frame_[idx++] = static_cast<float>(v_clip / 30.0);
+    }
     for (int i = 0; i < num_action; i++)
         policy_frame_[idx++] = static_cast<float>(last_action_processed_(i));
 
