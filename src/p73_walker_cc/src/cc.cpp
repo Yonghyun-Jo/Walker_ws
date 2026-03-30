@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iomanip>
 #include <numeric>
+#include <random>
 
 // =====================================================================
 // NOTE on joint ordering:
@@ -170,6 +171,17 @@ void CustomController::loadOnnX()
 }
 
 // =====================================================================
+// Noise state (file-scope static, matching TOCABI processNoise)
+// =====================================================================
+static Eigen::Matrix<double, MODEL_DOF, 1> s_q_noise = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
+static Eigen::Matrix<double, MODEL_DOF, 1> s_q_noise_pre = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
+static Eigen::Matrix<double, MODEL_DOF, 1> s_q_vel_noise = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
+static double s_noise_time_pre = -1.0;
+static bool s_noise_init = true;
+static std::mt19937 s_noise_gen(42);
+static std::uniform_real_distribution<> s_noise_dis(-0.00001, 0.00001);
+
+// =====================================================================
 // processObservation — uses rd_ directly (no copyRobotData)
 // =====================================================================
 void CustomController::processObservation()
@@ -187,9 +199,9 @@ void CustomController::processObservation()
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
 
-    // Joint pos/vel from rd_.q_ (SHM order = MuJoCo/IsaacLab order)
-    VectorXd q_pos = rd_.q_.head<12>();
-    VectorXd q_vel = rd_.q_dot_.head<12>();
+    // Joint pos/vel with TOCABI-style noise (obs only, not PD)
+    VectorXd q_pos = s_q_noise.head<12>();
+    VectorXd q_vel = s_q_vel_noise.head<12>();
     VectorXd q_pos_rel = q_pos - q_default_isaac_.cast<double>();
 
     double local_vel_x, local_vel_y, local_vel_yaw;
@@ -321,6 +333,25 @@ void CustomController::feedforwardPolicy()
 void CustomController::computeFast()
 {
     float control_time_us = rd_.control_time_us_;
+
+    // Noise update every tick (TOCABI processNoise equivalent)
+    {
+        double t_now = control_time_us / 1e6;
+        if (s_noise_init) {
+            s_q_noise = rd_.q_;
+            s_q_noise_pre = s_q_noise;
+            s_q_vel_noise.setZero();
+            s_noise_time_pre = t_now - 0.001;
+            s_noise_init = false;
+        }
+        for (int i = 0; i < MODEL_DOF; i++)
+            s_q_noise(i) = rd_.q_(i) + s_noise_dis(s_noise_gen);
+        double dt = t_now - s_noise_time_pre;
+        if (dt > 0.0)
+            s_q_vel_noise = (s_q_noise - s_q_noise_pre) / dt;
+        s_q_noise_pre = s_q_noise;
+        s_noise_time_pre = t_now;
+    }
 
     static bool init = true;
     if (init) {
