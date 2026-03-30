@@ -228,8 +228,11 @@ void CustomController::processObservation()
     policy_frame_[idx++] = static_cast<float>(gait_cos);
     for (int i = 0; i < 12; i++)
         policy_frame_[idx++] = static_cast<float>(q_pos_rel(i));
-    for (int i = 0; i < 12; i++)
-        policy_frame_[idx++] = static_cast<float>(q_vel(i));
+    for (int i = 0; i < 12; i++) {
+        // Match IsaacLab ObsTerm(clip=(-30,30), scale=1/30)
+        double v_clip = DyrosMath::minmax_cut(q_vel(i), -30.0, 30.0);
+        policy_frame_[idx++] = static_cast<float>(v_clip / 30.0);
+    }
     for (int i = 0; i < num_action; i++)
         policy_frame_[idx++] = static_cast<float>(last_action_processed_(i));
 
@@ -336,10 +339,24 @@ void CustomController::computeFast()
     }
 
     // Policy update at 50Hz
+    static int policy_step_count = 0;
     if ((control_time_us - time_inference_pre_) / 1.0e6 >= policy_dt_) {
         processObservation();
         feedforwardPolicy();
         time_inference_pre_ = control_time_us;
+        policy_step_count++;
+
+        // Dump first 10 policy steps for IsaacLab comparison
+        if (policy_step_count <= 10) {
+            Eigen::IOFormat fmt(6, 0, " ", " ");
+            cout << "\n=== POLICY STEP " << policy_step_count << " ===" << endl;
+            cout << "[dump] q_pos(12): " << rd_.q_.head<12>().transpose().format(fmt) << endl;
+            cout << "[dump] q_vel(12): " << rd_.q_dot_.head<12>().transpose().format(fmt) << endl;
+            cout << "[dump] action(12): " << rl_action_.transpose().format(fmt) << endl;
+            cout << "[dump] obs_frame(47): ";
+            for (int i = 0; i < num_single_obs; i++) cout << policy_frame_[i] << " ";
+            cout << endl;
+        }
     }
 
     // Action → Target Position → PD (every tick, no 200Hz hold)
