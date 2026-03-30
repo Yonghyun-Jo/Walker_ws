@@ -1,0 +1,59 @@
+p73_controller:
+  # Publish all joint states -----------------------------------
+  joint_state_controller:
+    type: joint_state_controller/JointStateController
+    publish_rate: 50
+
+  # Position Controllers --------------------------------------
+  WaistYaw_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: WaistYaw_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_HipRoll_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_HipRoll_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_HipRoll_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_HipRoll_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_HipPitch_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_HipPitch_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_HipPitch_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_HipPitch_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_HipYaw_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_HipYaw_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_HipYaw_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_HipYaw_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_Knee_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_Knee_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_Knee_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_Knee_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_AnklePitch_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_AnklePitch_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_AnklePitch_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_AnklePitch_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  L_AnkleRoll_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: L_AnkleRoll_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
+  R_AnkleRoll_Joint_position_controller:
+    type: effort_controllers/JointPositionController
+    joint: R_AnkleRoll_Joint
+    pid: {p: 100.0, i: 0.01, d: 10.0}
