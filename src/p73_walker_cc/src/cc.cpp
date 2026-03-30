@@ -2,7 +2,7 @@
 #include <cmath>
 #include <iomanip>
 #include <numeric>
-#include <random>
+#include <fstream>
 
 // =====================================================================
 // NOTE on joint ordering:
@@ -171,18 +171,8 @@ void CustomController::loadOnnX()
 }
 
 // =====================================================================
-// Noise state (file-scope static, matching TOCABI processNoise)
-// =====================================================================
-static Eigen::Matrix<double, MODEL_DOF, 1> s_q_noise = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
-static Eigen::Matrix<double, MODEL_DOF, 1> s_q_noise_pre = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
-static Eigen::Matrix<double, MODEL_DOF, 1> s_q_vel_noise = Eigen::Matrix<double, MODEL_DOF, 1>::Zero();
-static double s_noise_time_pre = -1.0;
-static bool s_noise_init = true;
-static std::mt19937 s_noise_gen(42);
-static std::uniform_real_distribution<> s_noise_dis(-0.00001, 0.00001);
-
-// =====================================================================
-// processObservation — uses rd_ directly (no copyRobotData)
+// processObservation — uses rd_ directly (matching TOCABI: no noise,
+// direct qvel from simulator, no numerical differentiation)
 // =====================================================================
 void CustomController::processObservation()
 {
@@ -199,9 +189,9 @@ void CustomController::processObservation()
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
 
-    // Joint pos/vel with TOCABI-style noise (obs only, not PD)
-    VectorXd q_pos = s_q_noise.head<12>();
-    VectorXd q_vel = s_q_vel_noise.head<12>();
+    // Joint pos/vel — direct from simulator (matching TOCABI: no noise, no numerical diff)
+    VectorXd q_pos = rd_.q_.head<12>();
+    VectorXd q_vel = rd_.q_dot_.head<12>();
     VectorXd q_pos_rel = q_pos - q_default_isaac_.cast<double>();
 
     double local_vel_x, local_vel_y, local_vel_yaw;
@@ -211,10 +201,8 @@ void CustomController::processObservation()
         local_vel_y = target_vel_y_;
         local_vel_yaw = target_vel_yaw_;
     }
-    // DEBUG: override velocity command for testing (remove when teleop works)
-    local_vel_x = 0.5;
-    local_vel_y = 0.0;
-    local_vel_yaw = 0.0;
+    // Velocity command from ROS2 teleop (topic: p73/cmd_vel)
+    // Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel
 
     double cmd_norm = std::sqrt(local_vel_x * local_vel_x +
                                 local_vel_y * local_vel_y +
@@ -249,32 +237,25 @@ void CustomController::processObservation()
     for (int i = 0; i < num_action; i++)
         policy_frame_[idx++] = static_cast<float>(last_action_processed_(i));
 
-    // Term-major history
+    // Frame-major history: [frame0(47D), frame1(47D), ..., frame4(47D)]
+    // Each frame is a complete 47D observation. Oldest at front, newest at back.
+    // This matches IsaacLab's P73ObservationManager layout.
     const int H = history_length_;
-    constexpr int dims[] = {3, 3, 3, 1, 1, 12, 12, 12};
-    int offsets[8]; offsets[0] = 0;
-    for (int t = 1; t < 8; t++) offsets[t] = offsets[t-1] + dims[t-1] * H;
-    int frame_offsets[8]; frame_offsets[0] = 0;
-    for (int t = 1; t < 8; t++) frame_offsets[t] = frame_offsets[t-1] + dims[t-1];
-
-    auto shift_append = [&](int offset, int dim, const float *cur) {
-        std::memmove(policy_obs_hist_term_major_.data() + offset,
-                     policy_obs_hist_term_major_.data() + offset + dim,
-                     sizeof(float) * dim * (H - 1));
-        std::memcpy(policy_obs_hist_term_major_.data() + offset + dim * (H - 1),
-                    cur, sizeof(float) * dim);
-    };
-    auto fill_all = [&](int offset, int dim, const float *cur) {
-        for (int t = 0; t < H; ++t)
-            std::memcpy(policy_obs_hist_term_major_.data() + offset + dim * t,
-                        cur, sizeof(float) * dim);
-    };
+    const int F = num_single_obs;  // 47
 
     if (!policy_hist_initialized_) {
-        for (int t = 0; t < 8; t++) fill_all(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
+        // Fill all H frames with the current frame
+        for (int t = 0; t < H; ++t)
+            std::memcpy(policy_obs_hist_term_major_.data() + t * F,
+                        policy_frame_.data(), sizeof(float) * F);
         policy_hist_initialized_ = true;
     } else {
-        for (int t = 0; t < 8; t++) shift_append(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
+        // Shift left by one frame (drop oldest), append newest at end
+        std::memmove(policy_obs_hist_term_major_.data(),
+                     policy_obs_hist_term_major_.data() + F,
+                     sizeof(float) * F * (H - 1));
+        std::memcpy(policy_obs_hist_term_major_.data() + F * (H - 1),
+                    policy_frame_.data(), sizeof(float) * F);
     }
 
     std::memcpy(input_states_buffer[input_policy_idx_].data(),
@@ -334,25 +315,6 @@ void CustomController::computeFast()
 {
     float control_time_us = rd_.control_time_us_;
 
-    // Noise update every tick (TOCABI processNoise equivalent)
-    {
-        double t_now = control_time_us / 1e6;
-        if (s_noise_init) {
-            s_q_noise = rd_.q_;
-            s_q_noise_pre = s_q_noise;
-            s_q_vel_noise.setZero();
-            s_noise_time_pre = t_now - 0.001;
-            s_noise_init = false;
-        }
-        for (int i = 0; i < MODEL_DOF; i++)
-            s_q_noise(i) = rd_.q_(i) + s_noise_dis(s_noise_gen);
-        double dt = t_now - s_noise_time_pre;
-        if (dt > 0.0)
-            s_q_vel_noise = (s_q_noise - s_q_noise_pre) / dt;
-        s_q_noise_pre = s_q_noise;
-        s_noise_time_pre = t_now;
-    }
-
     static bool init = true;
     if (init) {
         init = false;
@@ -378,20 +340,89 @@ void CustomController::computeFast()
         time_inference_pre_ = control_time_us;
         policy_step_count++;
 
-        // Dump first 10 policy steps for IsaacLab comparison
-        if (policy_step_count <= 10) {
-            Eigen::IOFormat fmt(6, 0, " ", " ");
-            cout << "\n=== POLICY STEP " << policy_step_count << " ===" << endl;
-            cout << "[dump] q_pos(12): " << rd_.q_.head<12>().transpose().format(fmt) << endl;
-            cout << "[dump] q_vel(12): " << rd_.q_dot_.head<12>().transpose().format(fmt) << endl;
-            cout << "[dump] action(12): " << rl_action_.transpose().format(fmt) << endl;
-            cout << "[dump] obs_frame(47): ";
-            for (int i = 0; i < num_single_obs; i++) cout << policy_frame_[i] << " ";
-            cout << endl;
+        // Dump first N policy steps to JSONL + console
+        constexpr int dump_max_steps = 25;
+        if (policy_step_count <= dump_max_steps) {
+            constexpr int dims[] = {3, 3, 3, 1, 1, 12, 12, 12};
+            const char* term_names[] = {"ang_vel", "gravity", "cmd", "gait_sin", "gait_cos",
+                                        "joint_pos", "joint_vel", "last_action"};
+            int H = history_length_;
+
+            // Extract newest frame (47D) from frame-major buffer
+            // Frame-major: newest frame is the last 47 elements
+            const float *newest = policy_obs_hist_term_major_.data() + (H - 1) * num_single_obs;
+            int fi = 0;
+
+            // Write JSONL to /tmp/walker_mujoco_obs.jsonl
+            static std::ofstream dump_file("/tmp/walker_mujoco_obs.jsonl", std::ios::out);
+            if (dump_file.is_open()) {
+                dump_file << std::fixed << std::setprecision(8);
+                dump_file << "{\"step\":" << policy_step_count - 1;
+
+                // full obs (235D)
+                dump_file << ",\"obs_235\":[";
+                for (int i = 0; i < policy_obs_dim_; i++)
+                    dump_file << policy_obs_hist_term_major_[i] << (i < policy_obs_dim_-1 ? "," : "");
+                dump_file << "]";
+
+                // actions
+                dump_file << ",\"actions\":[";
+                for (int i = 0; i < num_action; i++)
+                    dump_file << rl_action_(i) << (i < num_action-1 ? "," : "");
+                dump_file << "]";
+
+                // per-term newest frame
+                dump_file << ",\"frame_47\":{";
+                fi = 0;
+                for (int t = 0; t < 8; t++) {
+                    dump_file << "\"" << term_names[t] << "\":";
+                    if (dims[t] == 1) {
+                        dump_file << newest[fi++];
+                    } else {
+                        dump_file << "[";
+                        for (int d = 0; d < dims[t]; d++)
+                            dump_file << newest[fi++] << (d < dims[t]-1 ? "," : "");
+                        dump_file << "]";
+                    }
+                    if (t < 7) dump_file << ",";
+                }
+                dump_file << "}";
+
+                // raw state
+                dump_file << ",\"raw\":{";
+                dump_file << "\"quat_xyzw\":[" << rd_.q_virtual_(3) << "," << rd_.q_virtual_(4)
+                          << "," << rd_.q_virtual_(5) << "," << rd_.q_virtual_(6) << "]";
+                dump_file << ",\"ang_vel_body\":[" << rd_.q_dot_virtual_(3) << ","
+                          << rd_.q_dot_virtual_(4) << "," << rd_.q_dot_virtual_(5) << "]";
+                dump_file << ",\"joint_pos\":[";
+                for (int i = 0; i < 13; i++)
+                    dump_file << rd_.q_(i) << (i < 12 ? "," : "");
+                dump_file << "],\"joint_vel\":[";
+                for (int i = 0; i < 13; i++)
+                    dump_file << rd_.q_dot_(i) << (i < 12 ? "," : "");
+                dump_file << "]}";
+
+                dump_file << "}\n";
+                dump_file.flush();
+            }
+
+            // Console output (first 5 steps only)
+            if (policy_step_count <= 5) {
+                Eigen::IOFormat fmt(6, 0, ", ", ", ");
+                cout << "\n=== MuJoCo STEP " << policy_step_count - 1 << " ===" << endl;
+                fi = 0;
+                for (int t = 0; t < 8; t++) {
+                    cout << "  " << term_names[t] << ": ";
+                    for (int d = 0; d < dims[t]; d++)
+                        cout << newest[fi++] << " ";
+                    cout << endl;
+                }
+                cout << "  actions: " << rl_action_.transpose().format(fmt) << endl;
+            }
         }
     }
 
-    // Action → Target Position → PD (every tick, no 200Hz hold)
+    // Action → Target Position → PD every tick (matching TOCABI catkin_ws)
     VectorQd target_pos = q_default_p73_;
     for (int i = 0; i < num_action; i++) {
         double dq = rl_action_(i) * action_scale_;
