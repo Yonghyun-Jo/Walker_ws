@@ -79,17 +79,9 @@ StateEstimator::StateEstimator(DataContainer &dc)
 
     // Wait for system to become operational
     cout << "\nWaiting for system to become operational..." << endl;
-    int wait_count = 0;
     while (true && rclcpp::ok())
     {
         robot_data = robot.get_data();
-        if (wait_count % 1000 == 0) {
-            cout << " STATE : waiting... joint.valid=" << robot_data.joint.valid
-                 << " system_status=" << robot_data.joint.system_status
-                 << " (need " << ECAT_OPERATIONAL << ")"
-                 << " imu.valid=" << robot_data.imu.valid << endl;
-        }
-        wait_count++;
         if (robot_data.joint.valid && robot_data.joint.system_status == ECAT_OPERATIONAL && robot_data.imu.valid)
         {
             cout << "System is operational!" << endl;
@@ -706,11 +698,9 @@ void StateEstimator::StoreState(RobotEigenData &rd_global_)
 
     // q_virtual_ is in Pinocchio order (for kinematics).
     // rd_global_.q_virtual_ must be in code order (MuJoCo/IsaacLab) for cc and controller.
-    // Copy base pos(3) + quat(4) directly, remap joint(13) from Pinocchio→code order.
     {
         VectorQVQd q_virtual_code = q_virtual_;
         VectorVQd q_dot_virtual_code = q_dot_virtual_;
-        // Joints: q_virtual_[7+pin_idx] → q_virtual_code[7+code_idx]
         for (int i = 0; i < MODEL_DOF; i++) {
             q_virtual_code(7 + i) = q_virtual_(7 + P73::PINOCCHIO_IDX_FOR_CODE[i]);
             q_dot_virtual_code(6 + i) = q_dot_virtual_(6 + P73::PINOCCHIO_IDX_FOR_CODE[i]);

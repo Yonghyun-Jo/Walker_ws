@@ -8,12 +8,7 @@
 
 namespace P73
 {
-    // =====================================================================
     // Joint order: matches MuJoCo XML body tree / actuator order / IsaacLab
-    //   L_HipRoll(0), L_HipPitch(1), L_HipYaw(2), L_Knee(3), L_AnklePitch(4), L_AnkleRoll(5),
-    //   R_HipRoll(6), R_HipPitch(7), R_HipYaw(8), R_Knee(9), R_AnklePitch(10), R_AnkleRoll(11),
-    //   WaistYaw(12)
-    // =====================================================================
     const std::string JOINT_NAME[MODEL_DOF] = {
         "L_HipRoll_Joint", "L_HipPitch_Joint", "L_HipYaw_Joint", "L_Knee_Joint", "L_AnklePitch_Joint", "L_AnkleRoll_Joint",
         "R_HipRoll_Joint", "R_HipPitch_Joint", "R_HipYaw_Joint", "R_Knee_Joint", "R_AnklePitch_Joint", "R_AnkleRoll_Joint",
@@ -44,12 +39,10 @@ namespace P73
         12};
 
     // Pinocchio (URDF BFS) joint order differs from MuJoCo/code order.
-    // PINOCCHIO_IDX_FOR_CODE[code_idx] = pinocchio joint index
-    // Used to map q_/q_dot_ (code order) → q_virtual_local_ (Pinocchio order)
     const int PINOCCHIO_IDX_FOR_CODE[MODEL_DOF] = {
-        2, 4, 6, 8, 10, 12,    // L leg: Roll→2, Pitch→4, Yaw→6, Knee→8, AnkleP→10, AnkleR→12
-        1, 3, 5, 7,  9, 11,    // R leg: Roll→1, Pitch→3, Yaw→5, Knee→7, AnkleP→9,  AnkleR→11
-        0                       // WaistYaw→0
+        2, 4, 6, 8, 10, 12,
+        1, 3, 5, 7,  9, 11,
+        0
     };
 
 } // namespace P73
