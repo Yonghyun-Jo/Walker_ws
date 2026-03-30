@@ -109,6 +109,7 @@ public:
     VectorQd torque_bound_p73_;
     VectorQd torque_rl_;
     VectorQd torque_init_;
+    VectorQd q_init_hold_;  // DEBUG: captured pose at mode entry
     VectorQd torque_spline_;
 
     double action_scale_ = 0.5;  // from ActionsCfg scale

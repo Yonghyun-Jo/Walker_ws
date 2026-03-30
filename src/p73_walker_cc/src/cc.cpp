@@ -13,9 +13,6 @@
 //
 // This is the SAME order as IsaacLab _LOWER_JOINT_NAMES and MuJoCo XML actuators.
 // Therefore NO permutation is needed — data flows directly.
-//
-// P73 code (p73.h JOINT_NAME) uses a different order (Yaw,Roll,Pitch),
-// but that only matters for p73_controller task modes 0-4, NOT for cc.
 // =====================================================================
 
 // =====================================================================
@@ -46,43 +43,30 @@ void CustomController::initVariable()
 {
     cout << "[p73_walker_cc] Initializing variables" << endl;
 
-    // --- Default joint positions in MuJoCo/IsaacLab order (13D) ---
-    // MuJoCo/Isaac: L_HipRoll, L_HipPitch, L_HipYaw, L_Knee, L_AnklePitch, L_AnkleRoll,
-    //               R_HipRoll, R_HipPitch, R_HipYaw, R_Knee, R_AnklePitch, R_AnkleRoll,
-    //               WaistYaw
-    q_default_p73_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,    // L leg (Roll,Pitch,Yaw,Knee,AnkleP,AnkleR)
-                       0.0, -0.36, 0.0, -0.77,  0.41, 0.0,    // R leg
-                       0.0;                                      // WaistYaw
+    q_default_p73_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,
+                       0.0, -0.36, 0.0, -0.77,  0.41, 0.0,
+                       0.0;
 
-    // --- Default joint positions for lower 12 only (IsaacLab order) ---
-    q_default_isaac_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,    // L leg
-                         0.0, -0.36, 0.0, -0.77,  0.41, 0.0;    // R leg
+    q_default_isaac_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,
+                         0.0, -0.36, 0.0, -0.77,  0.41, 0.0;
 
-    // --- PD gains in MuJoCo/IsaacLab order (13D) ---
-    // ActionsCfg p_gains: [1536, 937.5, 625, 747.552, 490.644, 490.104, ... , 576]
-    kp_p73_ << 1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,   // L leg (Roll,Pitch,Yaw)
-               1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,   // R leg
-               576.0;                                               // WaistYaw
+    kp_p73_ << 1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,
+               1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,
+               576.0;
 
-    // ActionsCfg d_gains: [76.8, 37.5, 12.5, 37.378, 16.355, 16.337, ... , 19.2]
-    kd_p73_ << 76.8, 37.5, 12.5, 37.378, 16.355, 16.337,   // L leg (Roll,Pitch,Yaw)
-               76.8, 37.5, 12.5, 37.378, 16.355, 16.337,    // R leg
-               19.2;                                          // WaistYaw
+    kd_p73_ << 76.8, 37.5, 12.5, 37.378, 16.355, 16.337,
+               76.8, 37.5, 12.5, 37.378, 16.355, 16.337,
+               19.2;
 
-    // --- Torque limits in MuJoCo/IsaacLab order (13D, N*m) ---
-    // ActionsCfg: [352, 220, 95, 220, 95, 95, 352, 220, 95, 220, 95, 95, 152]
-    torque_bound_p73_ << 352.0, 220.0, 95.0, 220.0, 95.0, 95.0,   // L leg (Roll,Pitch,Yaw)
-                         352.0, 220.0, 95.0, 220.0, 95.0, 95.0,    // R leg
-                         152.0;                                      // WaistYaw
+    torque_bound_p73_ << 352.0, 220.0, 95.0, 220.0, 95.0, 95.0,
+                         352.0, 220.0, 95.0, 220.0, 95.0, 95.0,
+                         152.0;
 
-    // --- Joint position limits in IsaacLab order (lower 12 only, for q_des clamping) ---
-    // From rough_env_cfg.py ActionsCfg joint_pos_limits (IsaacLab order):
-    q_limit_lower_p73_ << -0.58, -1.57, -0.78,  0.0,  -1.05, -0.42,   // L leg
-                          -0.58, -2.09, -0.78, -2.56, -0.7,  -0.42;    // R leg
-    q_limit_upper_p73_ <<  0.3,   2.09,  0.78,  2.56,  0.7,   0.42,   // L leg
-                           0.3,   1.57,  0.78,  0.0,   1.05,  0.42;    // R leg
+    q_limit_lower_p73_ << -0.58, -1.57, -0.78,  0.0,  -1.05, -0.42,
+                          -0.58, -2.09, -0.78, -2.56, -0.7,  -0.42;
+    q_limit_upper_p73_ <<  0.3,   2.09,  0.78,  2.56,  0.7,   0.42,
+                           0.3,   1.57,  0.78,  0.0,   1.05,  0.42;
 
-    // --- Buffers ---
     rl_action_.setZero();
     last_action_processed_.setZero();
     torque_rl_.setZero();
@@ -93,7 +77,7 @@ void CustomController::initVariable()
 }
 
 // =====================================================================
-// loadOnnX - Load ONNX model and infer dimensions from shapes
+// loadOnnX
 // =====================================================================
 void CustomController::loadOnnX()
 {
@@ -143,14 +127,11 @@ void CustomController::loadOnnX()
         if (output_names[i] == "value")   output_value_idx_ = static_cast<int>(i);
     }
 
-    if (input_policy_idx_ < 0) {
+    if (input_policy_idx_ < 0)
         throw std::runtime_error("[p73_walker_cc] ONNX input 'obs' or 'policy_obs_history' not found.");
-    }
-    if (output_actions_idx_ < 0) {
+    if (output_actions_idx_ < 0)
         throw std::runtime_error("[p73_walker_cc] ONNX output 'actions' not found.");
-    }
 
-    // Initialize input tensors
     for (size_t i = 0; i < input_number; ++i) {
         Ort::TypeInfo type_info = session.GetInputTypeInfo(i);
         auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
@@ -171,16 +152,14 @@ void CustomController::loadOnnX()
             input_shape.size()));
     }
 
-    // Infer history_length from policy_obs_history shape: (1, 47*H)
     if (input_policy_idx_ >= 0) {
         Ort::TypeInfo type_info = session.GetInputTypeInfo(static_cast<size_t>(input_policy_idx_));
         auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
         auto s = tensor_info.GetShape();
         if (s.size() == 2 && s[1] > 0) {
             policy_obs_dim_ = static_cast<int>(s[1]);
-            if (policy_obs_dim_ % num_single_obs != 0) {
+            if (policy_obs_dim_ % num_single_obs != 0)
                 throw std::runtime_error("[p73_walker_cc] policy_obs_history dim must be divisible by 47.");
-            }
             history_length_ = policy_obs_dim_ / num_single_obs;
             cout << "[p73_walker_cc] Inferred policy_obs_dim=" << policy_obs_dim_
                  << " (history_length=" << history_length_ << ")" << endl;
@@ -191,44 +170,27 @@ void CustomController::loadOnnX()
 }
 
 // =====================================================================
-// processObservation - Build 47D policy frame and update term-major history
-//
-// SHM data is already in IsaacLab order — NO permutation needed.
+// processObservation — uses rd_ directly (no copyRobotData)
 // =====================================================================
 void CustomController::processObservation()
 {
-    // === Build single-frame observation (47D) in IsaacLab term order ===
-    // 0) base_ang_vel(3)         [body frame]
-    // 1) projected_gravity(3)    [body frame]
-    // 2) velocity_commands(3)    [vx, vy, wz]
-    // 3) gait_phase_sin(1)
-    // 4) gait_phase_cos(1)
-    // 5) motor_joint_pos(12)     [IsaacLab order, relative to default]
-    // 6) motor_joint_vel(12)     [IsaacLab order]
-    // 7) last_action(12)         [processed = raw * scale]
-
-    // q_virtual_ layout: [pos(3), quat_xyzw(4), joints(13)] = 20D
-    // q_dot_virtual_ layout: [lin_vel(3), ang_vel(3), joint_vel(13)] = 19D
     Quaterniond q;
-    q.x() = rd_cc_.q_virtual_(3);
-    q.y() = rd_cc_.q_virtual_(4);
-    q.z() = rd_cc_.q_virtual_(5);
-    q.w() = rd_cc_.q_virtual_(6);
+    q.x() = rd_.q_virtual_(3);
+    q.y() = rd_.q_virtual_(4);
+    q.z() = rd_.q_virtual_(5);
+    q.w() = rd_.q_virtual_(6);
 
-    Vector3d ang_vel_w = rd_cc_.q_dot_virtual_.segment<3>(3);
+    Vector3d ang_vel_w = rd_.q_dot_virtual_.segment<3>(3);
     Vector3d ang_vel_b = quatRotateInverse(q, ang_vel_w);
 
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
 
-    // Joint pos/vel — SHM is already in MuJoCo/IsaacLab order, use directly
-    // Joints start at index 7 in q_virtual_ (after pos3 + quat4)
-    // Joints start at index 6 in q_dot_virtual_ (after lin_vel3 + ang_vel3)
-    VectorXd q_pos = rd_cc_.q_virtual_.segment<12>(7);    // already IsaacLab order
-    VectorXd q_vel = rd_cc_.q_dot_virtual_.segment<12>(6); // already IsaacLab order
+    // Joint pos/vel from rd_.q_ (SHM order = MuJoCo/IsaacLab order)
+    VectorXd q_pos = rd_.q_.head<12>();
+    VectorXd q_vel = rd_.q_dot_.head<12>();
     VectorXd q_pos_rel = q_pos - q_default_isaac_.cast<double>();
 
-    // Read velocity commands (thread-safe)
     double local_vel_x, local_vel_y, local_vel_yaw;
     {
         std::lock_guard<std::mutex> lock(vel_mutex_);
@@ -236,8 +198,11 @@ void CustomController::processObservation()
         local_vel_y = target_vel_y_;
         local_vel_yaw = target_vel_yaw_;
     }
+    // DEBUG: override velocity command for testing (remove when teleop works)
+    local_vel_x = 0.5;
+    local_vel_y = 0.0;
+    local_vel_yaw = 0.0;
 
-    // Gait phase
     double cmd_norm = std::sqrt(local_vel_x * local_vel_x +
                                 local_vel_y * local_vel_y +
                                 local_vel_yaw * local_vel_yaw);
@@ -249,66 +214,40 @@ void CustomController::processObservation()
     double gait_sin = std::sin(2.0 * M_PI * phase);
     double gait_cos = std::cos(2.0 * M_PI * phase);
 
-    // Fill policy frame
     int idx = 0;
-
-    // base_ang_vel (3)
     policy_frame_[idx++] = static_cast<float>(ang_vel_b(0));
     policy_frame_[idx++] = static_cast<float>(ang_vel_b(1));
     policy_frame_[idx++] = static_cast<float>(ang_vel_b(2));
-
-    // projected_gravity (3)
     policy_frame_[idx++] = static_cast<float>(projected_gravity_b(0));
     policy_frame_[idx++] = static_cast<float>(projected_gravity_b(1));
     policy_frame_[idx++] = static_cast<float>(projected_gravity_b(2));
-
-    // velocity_commands (3) — from ROS2 subscriber
     policy_frame_[idx++] = static_cast<float>(local_vel_x);
     policy_frame_[idx++] = static_cast<float>(local_vel_y);
     policy_frame_[idx++] = static_cast<float>(local_vel_yaw);
-
-    // gait_phase_sin (1)
     policy_frame_[idx++] = static_cast<float>(gait_sin);
-
-    // gait_phase_cos (1)
     policy_frame_[idx++] = static_cast<float>(gait_cos);
-
-    // motor_joint_pos relative to default (12, already IsaacLab order)
     for (int i = 0; i < 12; i++)
         policy_frame_[idx++] = static_cast<float>(q_pos_rel(i));
-
-    // motor_joint_vel (12, already IsaacLab order)
     for (int i = 0; i < 12; i++)
         policy_frame_[idx++] = static_cast<float>(q_vel(i));
-
-    // last_action (12, processed = raw * scale)
     for (int i = 0; i < num_action; i++)
         policy_frame_[idx++] = static_cast<float>(last_action_processed_(i));
 
-    // === Update term-major history buffer ===
+    // Term-major history
     const int H = history_length_;
-
-    constexpr int dims[] = {3, 3, 3, 1, 1, 12, 12, 12};  // = 47
-    int offsets[8];
-    offsets[0] = 0;
-    for (int t = 1; t < 8; t++)
-        offsets[t] = offsets[t - 1] + dims[t - 1] * H;
-
-    int frame_offsets[8];
-    frame_offsets[0] = 0;
-    for (int t = 1; t < 8; t++)
-        frame_offsets[t] = frame_offsets[t - 1] + dims[t - 1];
+    constexpr int dims[] = {3, 3, 3, 1, 1, 12, 12, 12};
+    int offsets[8]; offsets[0] = 0;
+    for (int t = 1; t < 8; t++) offsets[t] = offsets[t-1] + dims[t-1] * H;
+    int frame_offsets[8]; frame_offsets[0] = 0;
+    for (int t = 1; t < 8; t++) frame_offsets[t] = frame_offsets[t-1] + dims[t-1];
 
     auto shift_append = [&](int offset, int dim, const float *cur) {
-        std::memmove(
-            policy_obs_hist_term_major_.data() + offset,
-            policy_obs_hist_term_major_.data() + offset + dim,
-            sizeof(float) * dim * (H - 1));
-        std::memcpy(
-            policy_obs_hist_term_major_.data() + offset + dim * (H - 1),
-            cur, sizeof(float) * dim);
+        std::memmove(policy_obs_hist_term_major_.data() + offset,
+                     policy_obs_hist_term_major_.data() + offset + dim,
+                     sizeof(float) * dim * (H - 1));
+        std::memcpy(policy_obs_hist_term_major_.data() + offset + dim * (H - 1),
+                    cur, sizeof(float) * dim);
     };
-
     auto fill_all = [&](int offset, int dim, const float *cur) {
         for (int t = 0; t < H; ++t)
             std::memcpy(policy_obs_hist_term_major_.data() + offset + dim * t,
@@ -316,33 +255,23 @@ void CustomController::processObservation()
     };
 
     if (!policy_hist_initialized_) {
-        for (int t = 0; t < 8; t++)
-            fill_all(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
+        for (int t = 0; t < 8; t++) fill_all(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
         policy_hist_initialized_ = true;
     } else {
-        for (int t = 0; t < 8; t++)
-            shift_append(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
+        for (int t = 0; t < 8; t++) shift_append(offsets[t], dims[t], policy_frame_.data() + frame_offsets[t]);
     }
 
-    // Copy to ONNX input buffer
     std::memcpy(input_states_buffer[input_policy_idx_].data(),
-                policy_obs_hist_term_major_.data(),
-                sizeof(float) * policy_obs_dim_);
+                policy_obs_hist_term_major_.data(), sizeof(float) * policy_obs_dim_);
 
-    // === Build critic_obs if needed ===
     if (input_critic_idx_ >= 0) {
         std::vector<float> &critic_in = input_states_buffer[input_critic_idx_];
-
-        Vector3d lin_vel_w = rd_cc_.q_dot_virtual_.segment<3>(0);
+        Vector3d lin_vel_w = rd_.q_dot_virtual_.segment<3>(0);
         Vector3d lin_vel_b = quatRotateInverse(q, lin_vel_w);
-
         critic_in[0] = static_cast<float>(lin_vel_b(0));
         critic_in[1] = static_cast<float>(lin_vel_b(1));
         critic_in[2] = static_cast<float>(ang_vel_b(2));
-
-        for (int i = 3; i < 9; i++)
-            critic_in[i] = 0.0f;
-
+        for (int i = 3; i < 9; i++) critic_in[i] = 0.0f;
         if (critic_in.size() >= static_cast<size_t>(9 + num_single_obs))
             std::memcpy(critic_in.data() + 9, policy_frame_.data(), sizeof(float) * num_single_obs);
     }
@@ -355,141 +284,113 @@ void CustomController::processObservation()
 // =====================================================================
 void CustomController::feedforwardPolicy()
 {
-    output_tensors = session.Run(
+    // Use local variable instead of member output_tensors to avoid
+    // Ort::Value destructor interfering with heap between calls
+    auto local_output = session.Run(
         Ort::RunOptions{nullptr},
         input_names_char.data(), input_tensors.data(), input_number,
         output_names_char.data(), output_number);
 
-    for (size_t i = 0; i < output_tensors.size(); i++) {
-        if (!output_tensors[i].IsTensor()) {
-            cerr << "[p73_walker_cc] Output " << i << " is not a valid tensor." << endl;
-            continue;
-        }
+    if (output_actions_idx_ >= 0 &&
+        static_cast<size_t>(output_actions_idx_) < local_output.size() &&
+        local_output[output_actions_idx_].IsTensor()) {
+        const float *actions_ptr = local_output[output_actions_idx_].GetTensorMutableData<float>();
+        for (int i = 0; i < num_action; i++)
+            rl_action_(i) = actions_ptr[i];
     }
 
-    // Extract actions (12D, IsaacLab order)
-    const float *actions_ptr = output_tensors[output_actions_idx_].GetTensorMutableData<float>();
-    for (int i = 0; i < num_action; i++)
-        rl_action_(i) = actions_ptr[i];
-
-    // Extract value (optional)
-    if (output_value_idx_ >= 0) {
-        const float *value_ptr = output_tensors[output_value_idx_].GetTensorMutableData<float>();
+    if (output_value_idx_ >= 0 &&
+        static_cast<size_t>(output_value_idx_) < local_output.size() &&
+        local_output[output_value_idx_].IsTensor()) {
+        const float *value_ptr = local_output[output_value_idx_].GetTensorMutableData<float>();
         value_ = static_cast<double>(value_ptr[0]);
     }
 
-    // Update last_action_processed for next observation
     for (int i = 0; i < num_action; i++)
         last_action_processed_(i) = DyrosMath::minmax_cut(rl_action_(i) * action_scale_, -1.0, 1.0);
+    // local_output destroyed here — Ort::Value cleanup happens at function exit
 }
 
 // =====================================================================
-// computeFast - Main control loop (called from TaskCtrlThread at ~2kHz)
-//
-// SHM data and d->ctrl[] are both in MuJoCo/IsaacLab order.
-// All computation here is in that same order — NO permutation.
+// computeFast — uses rd_ directly, NO copyRobotData
 // =====================================================================
 void CustomController::computeFast()
 {
-    copyRobotData(rd_);
+    // === STEP-BY-STEP DEBUG ===
+    // Minimal PD (known stable) + ONNX inference (action ignored for PD)
+    // Toggle flags below to isolate the problem.
 
-    static int debug_counter = 0;
-    if (debug_counter++ % 2000 == 0) {
-        cout << "[p73_walker_cc] task_mode=" << dc_.task_cmd_.task_mode
-             << " tc_mode=" << dc_.tc_mode << " cc_init=" << cc_init_
-             << " simMode=" << dc_.simMode
-             << " time_us=" << rd_cc_.control_time_us_ << endl;
-        if (dc_.task_cmd_.task_mode >= 5 && dc_.task_cmd_.task_mode < 10) {
-            cout << "[p73_walker_cc] action: " << rl_action_.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
-            cout << "[p73_walker_cc] torque: " << rd_.torque_desired.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
-            VectorXd q_pos = rd_cc_.q_virtual_.segment<MODEL_DOF>(7);
-            cout << "[p73_walker_cc] q_pos:  " << q_pos.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
-            cout << "[p73_walker_cc] q_def:  " << q_default_p73_.transpose().format(Eigen::IOFormat(3, 0, " ", " ")) << endl;
-        }
+    static bool init = true;
+    static VectorQd q_hold;
+    float control_time_us = rd_.control_time_us_;
+
+    if (init) {
+        init = false;
+        q_hold = rd_.q_;
+        start_time_ = control_time_us;
+        time_inference_pre_ = control_time_us - policy_dt_ * 1e6;
+        rl_action_.setZero();
+        last_action_processed_.setZero();
+        gait_step_counter_ = 0;
+        policy_hist_initialized_ = false;
+        std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
+        cout << "[p73_walker_cc] Step-by-step debug started." << endl;
     }
 
-    if (dc_.task_cmd_.task_mode >= 5 && dc_.task_cmd_.task_mode < 10)
-    {
-        if (cc_init_)
-        {
-            cc_init_ = false;
-            cout << "[p73_walker_cc] Mode " << dc_.task_cmd_.task_mode << " started." << endl;
-            start_time_ = rd_cc_.control_time_us_;
-            torque_init_ = rd_.torque_desired;
-            time_inference_pre_ = rd_cc_.control_time_us_ - policy_dt_ * 1e6;
+    // --- STEP 1: Run ONNX inference at 50Hz (change to false to disable) ---
+    constexpr bool ENABLE_ONNX = false;  // true to run ONNX, false to skip
+    // TEST: obs + inference, but action results ignored by PD
+    if ((control_time_us - time_inference_pre_) / 1.0e6 >= policy_dt_) {
+        processObservation();
+        feedforwardPolicy();
+        time_inference_pre_ = control_time_us;
+    }
 
-            // Reset state
-            rl_action_.setZero();
-            last_action_processed_.setZero();
-            gait_step_counter_ = 0;
-            policy_hist_initialized_ = false;
-            std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
+    // --- STEP 2: Use ONNX action for target? (false = q_hold, true = q_default + action) ---
+    constexpr bool USE_ONNX_ACTION = true;
 
-            // First inference
-            processObservation();
-            feedforwardPolicy();
-        }
+    // --- STEP 3: Use cc gains or YAML gains? (false = YAML rd_.Kp_j, true = cc kp_p73_) ---
+    constexpr bool USE_CC_GAINS = true;
 
-        // Policy update at policy_dt_ (50Hz)
-        const bool do_policy_update =
-            (rd_cc_.control_time_us_ - time_inference_pre_) / 1.0e6 >= policy_dt_;
-
-        if (do_policy_update) {
-            processObservation();
-            feedforwardPolicy();
-            time_inference_pre_ = rd_cc_.control_time_us_;
-        }
-
-        // === Action → Target Position → PD → Torque (all in MuJoCo/IsaacLab order) ===
-        // ONNX output is in IsaacLab order (12D)
-        // q_des = q_default + clamp(action * scale, -1, 1)
-        VectorQd target_pos = q_default_p73_;  // 13D, MuJoCo/IsaacLab order
+    // --- PD computation ---
+    if (USE_ONNX_ACTION) {
+        VectorQd target_pos = q_default_p73_;
         for (int i = 0; i < num_action; i++) {
-            double dq = rl_action_(i) * action_scale_;  // scale = 0.5
+            double dq = rl_action_(i) * action_scale_;
             dq = DyrosMath::minmax_cut(dq, -1.0, 1.0);
             target_pos(i) = q_default_p73_(i) + dq;
-            // Clamp q_des to joint limits (matches IsaacLab)
             target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
         }
-        // WaistYaw (index 12) stays at default — already set from q_default_p73_
-
-        // PD torque — SHM joint data is already in MuJoCo/IsaacLab order
-        VectorXd q_pos = rd_cc_.q_virtual_.segment<MODEL_DOF>(7);
-        VectorXd q_vel = rd_cc_.q_dot_virtual_.segment<MODEL_DOF>(6);
-
         for (int i = 0; i < MODEL_DOF; i++) {
-            torque_rl_(i) = kp_p73_(i) * (target_pos(i) - q_pos(i))
-                          - kd_p73_(i) * q_vel(i);
-            torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
-                            -torque_bound_p73_(i), torque_bound_p73_(i));
+            double kp = USE_CC_GAINS ? kp_p73_(i) : rd_.Kp_j[i];
+            double kd = USE_CC_GAINS ? kd_p73_(i) : rd_.Kd_j[i];
+            rd_.torque_desired(i) = kp * (target_pos(i) - rd_.q_(i)) - kd * rd_.q_dot_(i);
         }
+    } else {
+        for (int i = 0; i < MODEL_DOF; i++) {
+            double kp = USE_CC_GAINS ? kp_p73_(i) : rd_.Kp_j[i];
+            double kd = USE_CC_GAINS ? kd_p73_(i) : rd_.Kd_j[i];
+            rd_.torque_desired(i) = kp * (q_hold(i) - rd_.q_(i)) - kd * rd_.q_dot_(i);
+        }
+    }
 
-        // Spline transition for first 100ms
-        if (rd_cc_.control_time_us_ < start_time_ + 0.1e6) {
-            for (int i = 0; i < MODEL_DOF; i++)
-                torque_spline_(i) = DyrosMath::cubic(rd_cc_.control_time_us_,
-                    start_time_, start_time_ + 0.1e6,
-                    torque_init_(i), torque_rl_(i), 0.0, 0.0);
-            rd_.torque_desired = torque_spline_;
-        } else {
-            rd_.torque_desired = torque_rl_;
-        }
+    // Debug print
+    static int dbg = 0;
+    if (dbg++ % 500 == 0) {
+        Eigen::IOFormat fmt(3, 0, " ", " ");
+        cout << "[cc] act: " << rl_action_.transpose().format(fmt)
+             << " | gait: " << gait_step_counter_ << endl;
     }
 }
 
 // =====================================================================
-// computeSlow - Reserved for future slow-rate computations
-// =====================================================================
-void CustomController::computeSlow()
-{
-}
+void CustomController::computeSlow() {}
 
-// =====================================================================
-// Utility
-// =====================================================================
 void CustomController::copyRobotData(RobotEigenData &rd_l)
 {
-    std::memcpy(&rd_cc_, &rd_l, sizeof(RobotEigenData));
+    // DEPRECATED: memcpy on RobotEigenData corrupts std::vector members.
+    // Use rd_ directly instead.
+    (void)rd_l;
 }
 
 Vector3d CustomController::quatRotateInverse(const Quaterniond &q, const Vector3d &v)
@@ -519,7 +420,6 @@ void CustomController::startVelSubscriber()
     vel_sub_ = vel_node_->create_subscription<geometry_msgs::msg::Twist>(
         "p73/cmd_vel", 10,
         std::bind(&CustomController::velCmdCallback, this, std::placeholders::_1));
-
     vel_spin_running_ = true;
     vel_spin_thread_ = std::thread([this]() {
         while (vel_spin_running_ && rclcpp::ok()) {
@@ -527,7 +427,6 @@ void CustomController::startVelSubscriber()
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     });
-
     cout << "[p73_walker_cc] Velocity command subscriber started on topic: p73/cmd_vel" << endl;
     cout << "[p73_walker_cc] Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel" << endl;
 }
@@ -535,8 +434,7 @@ void CustomController::startVelSubscriber()
 void CustomController::stopVelSubscriber()
 {
     vel_spin_running_ = false;
-    if (vel_spin_thread_.joinable())
-        vel_spin_thread_.join();
+    if (vel_spin_thread_.joinable()) vel_spin_thread_.join();
     vel_sub_.reset();
     vel_node_.reset();
 }
