@@ -316,44 +316,41 @@ void CustomController::feedforwardPolicy()
 // =====================================================================
 void CustomController::computeFast()
 {
-    // === STEP-BY-STEP DEBUG ===
-    // Minimal PD (known stable) + ONNX inference (action ignored for PD)
-    // Toggle flags below to isolate the problem.
-
-    static bool init = true;
-    static VectorQd q_hold;
     float control_time_us = rd_.control_time_us_;
 
-    if (init) {
-        init = false;
-        q_hold = rd_.q_;
+    if (cc_init_)
+    {
+        cc_init_ = false;
+        cout << "[p73_walker_cc] Mode " << dc_.task_cmd_.task_mode << " started." << endl;
         start_time_ = control_time_us;
+        torque_init_ = rd_.torque_desired;
         time_inference_pre_ = control_time_us - policy_dt_ * 1e6;
+        last_pd_us_ = control_time_us;
+
         rl_action_.setZero();
         last_action_processed_.setZero();
         gait_step_counter_ = 0;
         policy_hist_initialized_ = false;
         std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
-        cout << "[p73_walker_cc] Step-by-step debug started." << endl;
+
+        processObservation();
+        feedforwardPolicy();
     }
 
-    // --- STEP 1: Run ONNX inference at 50Hz (change to false to disable) ---
-    constexpr bool ENABLE_ONNX = false;  // true to run ONNX, false to skip
-    // TEST: obs + inference, but action results ignored by PD
+    // === Policy update at 50Hz ===
     if ((control_time_us - time_inference_pre_) / 1.0e6 >= policy_dt_) {
         processObservation();
         feedforwardPolicy();
         time_inference_pre_ = control_time_us;
     }
 
-    // --- STEP 2: Use ONNX action for target? (false = q_hold, true = q_default + action) ---
-    constexpr bool USE_ONNX_ACTION = true;
+    // === PD update at 200Hz (match IsaacLab physics dt=0.005s) ===
+    // Between PD updates, hold the last torque (same as IsaacLab: set_joint_effort_target is held)
+    const bool do_pd = (control_time_us - last_pd_us_) / 1.0e6 >= pd_dt_;
+    if (do_pd) {
+        last_pd_us_ = control_time_us;
 
-    // --- STEP 3: Use cc gains or YAML gains? (false = YAML rd_.Kp_j, true = cc kp_p73_) ---
-    constexpr bool USE_CC_GAINS = true;
-
-    // --- PD computation ---
-    if (USE_ONNX_ACTION) {
+        // Action → Target Position
         VectorQd target_pos = q_default_p73_;
         for (int i = 0; i < num_action; i++) {
             double dq = rl_action_(i) * action_scale_;
@@ -361,24 +358,35 @@ void CustomController::computeFast()
             target_pos(i) = q_default_p73_(i) + dq;
             target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
         }
+
+        // PD torque
         for (int i = 0; i < MODEL_DOF; i++) {
-            double kp = USE_CC_GAINS ? kp_p73_(i) : rd_.Kp_j[i];
-            double kd = USE_CC_GAINS ? kd_p73_(i) : rd_.Kd_j[i];
-            rd_.torque_desired(i) = kp * (target_pos(i) - rd_.q_(i)) - kd * rd_.q_dot_(i);
-        }
-    } else {
-        for (int i = 0; i < MODEL_DOF; i++) {
-            double kp = USE_CC_GAINS ? kp_p73_(i) : rd_.Kp_j[i];
-            double kd = USE_CC_GAINS ? kd_p73_(i) : rd_.Kd_j[i];
-            rd_.torque_desired(i) = kp * (q_hold(i) - rd_.q_(i)) - kd * rd_.q_dot_(i);
+            torque_rl_(i) = kp_p73_(i) * (target_pos(i) - rd_.q_(i))
+                          - kd_p73_(i) * rd_.q_dot_(i);
+            torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
+                            -torque_bound_p73_(i), torque_bound_p73_(i));
         }
     }
+    // else: hold previous torque_rl_ (rd_.torque_desired not updated)
 
-    // Debug print
+    // === Output torque ===
+    // Spline transition for first 100ms
+    if (control_time_us < start_time_ + 0.1e6) {
+        for (int i = 0; i < MODEL_DOF; i++)
+            torque_spline_(i) = DyrosMath::cubic(control_time_us,
+                start_time_, start_time_ + 0.1e6,
+                torque_init_(i), torque_rl_(i), 0.0, 0.0);
+        rd_.torque_desired = torque_spline_;
+    } else {
+        rd_.torque_desired = torque_rl_;
+    }
+
+    // Debug
     static int dbg = 0;
     if (dbg++ % 500 == 0) {
         Eigen::IOFormat fmt(3, 0, " ", " ");
-        cout << "[cc] act: " << rl_action_.transpose().format(fmt)
+        cout << "[cc] t=" << control_time_us/1e6
+             << " act: " << rl_action_.transpose().format(fmt)
              << " | gait: " << gait_step_counter_ << endl;
     }
 }

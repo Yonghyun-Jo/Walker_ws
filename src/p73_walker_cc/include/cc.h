@@ -122,6 +122,12 @@ public:
     // Policy rate: 50Hz (decimation=4, dt=0.005 → policy_dt=0.02)
     double policy_dt_ = 0.02;
 
+    // PD rate: 200Hz (= IsaacLab physics dt = 0.005s)
+    // In IsaacLab, PD torque is computed once per physics step and held.
+    // MuJoCo runs at 1kHz, so we hold PD for 5 ticks to match 200Hz.
+    double pd_dt_ = 0.005;
+    float last_pd_us_ = 0.0;
+
     // Gait phase counter (50Hz step counter)
     int gait_step_counter_ = 0;
     int gait_period_steps_ = 50;  // from rough_env_cfg __post_init__
