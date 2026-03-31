@@ -82,17 +82,26 @@ sudo ros2 launch p73_controller realrobot.launch.py
 
 ---
 
-## ONNX Policy 실행 (현재 미구현 - TODO)
-
-tocabi 참조 기반 예상 워크플로:
+## ONNX Policy 실행 (sim2sim 성공)
 
 ```bash
-# 1. 시뮬레이션 실행 (위 참조)
-# 2. GUI에서 ONNX Policy 모드 선택
-# 3. Policy가 관측값 계산 → ONNX 추론 → 토크 명령 전송
+# 1. 시뮬레이션 실행
+ros2 launch p73_controller simulation.launch.py
+
+# 2. GUI에서 Task Mode 7 선택 → ONNX policy 자동 실행
+#    policy.onnx 위치: ~/Walker_ws/src/p73_walker_cc/policy/policy.onnx
+
+# 3. 텔레오프 (별도 터미널)
+python3 ~/Walker_ws/src/p73_walker_cc/scripts/walker_teleop.py
+#   w/s: 전후 | a/d: 좌우 | q/e: 회전 | space: 정지
 ```
 
-구현 필요 사항은 `06_todo.md` 참조.
+빌드 주의: `p73_walker_cc`는 정적 라이브러리이므로 `p73_controller`도 함께 빌드해야 반영됨:
+```bash
+colcon build --packages-select p73_walker_cc p73_controller --cmake-args -DCMAKE_BUILD_TYPE=Release
+```
+
+sim2sim 디버깅 기록은 `12_sim2sim_debug_resolution.md` 참조.
 
 ---
 

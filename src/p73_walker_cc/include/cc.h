@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <random>
 
 using namespace Eigen;
 using namespace std;
@@ -34,6 +35,7 @@ public:
     //////////////////////// Functions ////////////////////////
     void initVariable();
     void loadOnnX();
+    void processNoise();
     void processObservation();
     void feedforwardPolicy();
     Vector3d quatRotateInverse(const Quaterniond &q, const Vector3d &v);
@@ -89,6 +91,22 @@ public:
 
     // Critic obs (if needed)
     std::vector<float> critic_obs_;
+
+    //////////////////////// processNoise (TOCABI sim2real pattern) ////////////////////////
+    // is_on_robot_: true=real robot (direct sensor + LPF), false=sim (noise + numerical diff + LPF)
+    bool is_on_robot_ = false;
+
+    // Filtered/noised joint state — used by BOTH obs and PD (matching TOCABI)
+    Matrix<double, MODEL_DOF, 1> q_noise_;       // joint position (noised in sim, direct on robot)
+    Matrix<double, MODEL_DOF, 1> q_noise_pre_;   // previous step (for numerical diff)
+    Matrix<double, MODEL_DOF, 1> q_vel_noise_;   // joint velocity (numerical diff in sim, direct on robot)
+    Matrix<double, MODEL_DOF, 1> q_dot_lpf_;     // LPF-filtered joint velocity (4Hz cutoff)
+
+    double noise_time_cur_ = 0.0;
+    double noise_time_pre_ = 0.0;
+    bool noise_initialized_ = false;
+
+    static constexpr double lpf_cutoff_hz_ = 4.0;  // TOCABI uses 4Hz LPF for q_dot
 
     //////////////////////// Robot State ////////////////////////
     // Default joint positions in P73 order (from p73_walker.py)

@@ -171,8 +171,53 @@ void CustomController::loadOnnX()
 }
 
 // =====================================================================
-// processObservation — uses rd_ directly (matching TOCABI: no noise,
-// direct qvel from simulator, no numerical differentiation)
+// processNoise — TOCABI sim2real pattern
+//
+// Real robot:  direct sensor values + 4Hz LPF on velocity
+// Simulation:  tiny noise on position + numerical differentiation + 4Hz LPF
+//
+// q_noise_ and q_vel_noise_ are used by BOTH obs AND PD (consistent)
+// =====================================================================
+void CustomController::processNoise()
+{
+    noise_time_cur_ = rd_.control_time_us_ / 1e6;
+
+    if (is_on_robot_)
+    {
+        // Real robot: use sensor values directly
+        q_noise_ = rd_.q_;
+        q_vel_noise_ = rd_.q_dot_;
+
+        double dt = noise_time_cur_ - noise_time_pre_;
+        if (dt > 0.0) {
+            double sampling_freq = 1.0 / dt;
+            q_dot_lpf_ = DyrosMath::lpf<MODEL_DOF>(q_vel_noise_, q_dot_lpf_, sampling_freq, lpf_cutoff_hz_);
+        }
+    }
+    else
+    {
+        // Simulation: add tiny noise + numerical differentiation (matching TOCABI)
+        static std::mt19937 gen(std::random_device{}());
+        static std::uniform_real_distribution<> dis(-0.00001, 0.00001);
+
+        for (int i = 0; i < MODEL_DOF; i++)
+            q_noise_(i) = rd_.q_(i) + dis(gen);
+
+        double dt = noise_time_cur_ - noise_time_pre_;
+        if (dt > 0.0) {
+            q_vel_noise_ = (q_noise_ - q_noise_pre_) / dt;
+            double sampling_freq = 1.0 / dt;
+            q_dot_lpf_ = DyrosMath::lpf<MODEL_DOF>(q_vel_noise_, q_dot_lpf_, sampling_freq, lpf_cutoff_hz_);
+        }
+
+        q_noise_pre_ = q_noise_;
+    }
+
+    noise_time_pre_ = noise_time_cur_;
+}
+
+// =====================================================================
+// processObservation — uses q_noise_/q_vel_noise_ from processNoise()
 // =====================================================================
 void CustomController::processObservation()
 {
@@ -189,9 +234,9 @@ void CustomController::processObservation()
     Vector3d g_w(0.0, 0.0, -1.0);
     Vector3d projected_gravity_b = quatRotateInverse(q, g_w);
 
-    // Joint pos/vel — direct from simulator (matching TOCABI: no noise, no numerical diff)
-    VectorXd q_pos = rd_.q_.head<12>();
-    VectorXd q_vel = rd_.q_dot_.head<12>();
+    // Joint pos/vel — from processNoise() (noised in sim, direct on robot)
+    VectorXd q_pos = q_noise_.head<12>();
+    VectorXd q_vel = q_vel_noise_.head<12>();
     VectorXd q_pos_rel = q_pos - q_default_isaac_.cast<double>();
 
     double local_vel_x, local_vel_y, local_vel_yaw;
@@ -326,11 +371,24 @@ void CustomController::computeFast()
         gait_step_counter_ = 0;
         policy_hist_initialized_ = false;
         std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
-        cout << "[p73_walker_cc] Mode started." << endl;
 
+        // Initialize processNoise state
+        q_noise_ = rd_.q_;
+        q_noise_pre_ = q_noise_;
+        q_vel_noise_.setZero();
+        q_dot_lpf_.setZero();
+        noise_time_cur_ = control_time_us / 1e6;
+        noise_time_pre_ = noise_time_cur_ - 0.001;
+
+        cout << "[p73_walker_cc] Mode started (is_on_robot=" << is_on_robot_ << ")" << endl;
+
+        processNoise();
         processObservation();
         feedforwardPolicy();
     }
+
+    // Update noise/velocity state every tick (before policy and PD)
+    processNoise();
 
     // Policy update at 50Hz
     static int policy_step_count = 0;
@@ -431,8 +489,8 @@ void CustomController::computeFast()
         target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
     }
     for (int i = 0; i < MODEL_DOF; i++) {
-        torque_rl_(i) = kp_p73_(i) * (target_pos(i) - rd_.q_(i))
-                      - kd_p73_(i) * rd_.q_dot_(i);
+        torque_rl_(i) = kp_p73_(i) * (target_pos(i) - q_noise_(i))
+                      - kd_p73_(i) * q_vel_noise_(i);
         torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
                         -torque_bound_p73_(i), torque_bound_p73_(i));
     }
