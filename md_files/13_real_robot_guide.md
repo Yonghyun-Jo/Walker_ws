@@ -167,8 +167,10 @@ mv ~/Walker_ws/src/p73_cc.bak ~/Walker_ws/src/p73_cc
 
 # 재빌드
 cd ~/Walker_ws
-colcon build --packages-select p73_cc p73_controller --cmake-args -DCMAKE_BUILD_TYPE=Release
-touch src/p73_walker_controller/p73_controller/src/*.cpp
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select p73_cc --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+rm -rf build/p73_controller
 colcon build --packages-select p73_controller --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
 ```
@@ -179,6 +181,7 @@ source install/setup.bash
 
 - [ ] `grep is_on_robot_ include/cc.h` → `true`
 - [ ] policy.onnx shape 확인 (235 or 470)
-- [ ] p73_controller 빌드 ~1분 (0.x초면 캐시됨, touch 후 재빌드)
+- [ ] `build/p73_controller` 삭제 후 재빌드 (~1분 소요 확인)
 - [ ] `source install/setup.bash` 했는지
+- [ ] 콘솔에 `[p73_cc] Loading network from...` 로그 확인
 - [ ] 콘솔에 `is_on_robot=1` 확인
