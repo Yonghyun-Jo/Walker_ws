@@ -52,7 +52,7 @@ public:
     VectorQd q_, q_dot_, q_torque_;
     VectorQd q_dot_lpf_;
     // motor position and velocity from elmo
-    VectorQd q_motor_, q_dot_motor_;
+    VectorQd q_motor_, q_dot_motor_, q_torque_motor_;
     // joint + motor position and velocity
     Matrix<rScalar, MODEL_DOF+8, 1> q_4bar_, q_dot_4bar_;
     MatrixQQd four_bar_Jaco_, four_bar_Jaco_inv_;
@@ -69,6 +69,7 @@ public:
     VectorVQd q_dot_virtual_, q_dot_virtual_local_;
 
     Vector3d q_virtual_mjc_, q_dot_virtual_mjc_;
+    bool zero_rpy_for_circular_traj_ = false;
 
     //--- Pinocchio
     LinkData link_[LINK_NUMBER + 1];
@@ -82,6 +83,10 @@ public:
 
     MatrixVVd A_, A_inv_, C_;
     VectorVQd G_;
+
+    Eigen::Vector6d centroidal_momentum_;
+    Eigen::Vector3d centroidal_angular_momentum_;
+    Eigen::Vector3d centroidal_linear_momentum_;
 
     double torqOnTime = 0.0;
     double torqOffTime = 0.0;

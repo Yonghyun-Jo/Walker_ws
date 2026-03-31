@@ -83,16 +83,16 @@ TOCABI cc.cpp에는 노이즈 주입이 없음. Walker에 있던 `s_noise_gen`, 
 
 ### 3.3 빌드 주의사항
 
-`p73_walker_cc`는 **정적 라이브러리** (`libp73_walker_cc.a`)이므로, 이것을 링크하는 `p73_controller`도 함께 빌드해야 변경이 반영됨:
+`p73_cc`는 **정적 라이브러리** (`libp73_cc.a`)이므로, 이것을 링크하는 `p73_controller`도 함께 빌드해야 변경이 반영됨:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/Walker_ws/install/setup.bash
-colcon build --packages-select p73_walker_cc p73_controller \
+colcon build --packages-select p73_cc p73_controller \
   --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
 
-`p73_walker_cc`만 빌드하면 **이전 바이너리가 계속 실행**된다!
+`p73_cc`만 빌드하면 **이전 바이너리가 계속 실행**된다!
 
 ---
 
@@ -272,7 +272,7 @@ print("Term-major gravity:", obs[15:18])
 
 2. **커스텀 ObservationManager 주의** — `P73ObservationManager`가 표준 IsaacLab과 다른 레이아웃을 만들 수 있다. 항상 실제 출력을 확인.
 
-3. **정적 라이브러리 빌드 체인** — `p73_walker_cc`만 빌드하면 안 되고, 링크하는 `p73_controller`도 반드시 함께 빌드해야 한다.
+3. **정적 라이브러리 빌드 체인** — `p73_cc`만 빌드하면 안 되고, 링크하는 `p73_controller`도 반드시 함께 빌드해야 한다.
 
 4. **덤프는 짧게, 비교는 즉시** — 25 step (0.5초)이면 충분. 발산 전에 첫 mismatch를 찾는 것이 핵심.
 

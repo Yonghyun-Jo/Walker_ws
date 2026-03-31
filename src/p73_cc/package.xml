@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>p73_walker_cc</name>
+  <name>p73_cc</name>
   <version>0.0.1</version>
   <description>Walker Custom Controller - ONNX RL Policy Execution for P73 Walker Robot</description>
 

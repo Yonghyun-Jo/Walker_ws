@@ -18,7 +18,7 @@
 #include <iomanip>   
 #include <ncurses.h>
 
-#ifdef COMPILE_P73_CC
+#ifdef COMPILE_CC
 #include "cc.h"
 #endif
 
@@ -36,7 +36,7 @@ public:
     DataContainer &dc_;
     RobotEigenData &rd_;
 
-#ifdef COMPILE_P73_CC
+#ifdef COMPILE_CC
     CustomController &cc_;
 #endif
     FourBarKinematics four_bar_kinematics_;

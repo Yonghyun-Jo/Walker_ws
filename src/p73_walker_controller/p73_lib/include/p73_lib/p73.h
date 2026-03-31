@@ -8,7 +8,6 @@
 
 namespace P73
 {
-    // Joint order: matches MuJoCo XML body tree / actuator order / IsaacLab
     const std::string JOINT_NAME[MODEL_DOF] = {
         "L_HipRoll_Joint", "L_HipPitch_Joint", "L_HipYaw_Joint", "L_Knee_Joint", "L_AnklePitch_Joint", "L_AnkleRoll_Joint",
         "R_HipRoll_Joint", "R_HipPitch_Joint", "R_HipYaw_Joint", "R_Knee_Joint", "R_AnklePitch_Joint", "R_AnkleRoll_Joint",
@@ -26,24 +25,17 @@ namespace P73
     const int Left_Foot  = 6;
     const int Right_Foot = 12;
     const int Waist = 13;
-    const int COM_id = 14;
+    const int COM_id = 14;  
 
     const int JOINT_2_ELMO[MODEL_DOF] = {
         0, 1, 2, 3, 4, 5,
-        6, 7, 8, 9, 10, 11,
+        6, 7, 8, 9, 10, 11, 
         12};
 
     const int ELMO_2_JOINT[MODEL_DOF] = {
         0, 1, 2, 3, 4, 5,
         6, 7, 8, 9, 10, 11,
         12};
-
-    // Pinocchio (URDF BFS) joint order differs from MuJoCo/code order.
-    const int PINOCCHIO_IDX_FOR_CODE[MODEL_DOF] = {
-        2, 4, 6, 8, 10, 12,
-        1, 3, 5, 7,  9, 11,
-        0
-    };
 
 } // namespace P73
 

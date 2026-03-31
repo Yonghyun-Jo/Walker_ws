@@ -1,5 +1,5 @@
-#ifndef P73_WALKER_CC_H
-#define P73_WALKER_CC_H
+#ifndef p73_cc_H
+#define p73_cc_H
 
 #include "p73_lib/robot_data.h"
 #include "onnxruntime_cxx_api.h"

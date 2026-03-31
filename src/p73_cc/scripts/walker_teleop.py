@@ -11,7 +11,7 @@ Keys:
   Ctrl+C : quit
 
 Usage:
-  ros2 run p73_walker_cc walker_teleop.py
+  ros2 run p73_cc walker_teleop.py
   # or directly:
   python3 walker_teleop.py
 """

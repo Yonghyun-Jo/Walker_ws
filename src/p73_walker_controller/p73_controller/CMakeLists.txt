@@ -22,16 +22,16 @@ find_package(p73_lib REQUIRED)
 find_package(br_driver REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
-find_package(p73_walker_cc QUIET)
-IF(p73_walker_cc_FOUND)
- message(" -- p73_walker_cc custom controller package found" )
-   ADD_DEFINITIONS(-DCOMPILE_P73_CC)
+find_package(p73_cc QUIET)
+IF(p73_cc_FOUND)
+  message(" -- p73 custom based custom controller package found" )
+  ADD_DEFINITIONS(-DCOMPILE_CC)
 ENDIF()
 
 include_directories(
   include
   ${p73_lib_INCLUDE_DIRS}
-  ${p73_walker_cc_INCLUDE_DIRS}
+  ${p73_cc_INCLUDE_DIRS}
   /usr/local/include/br_driver
 )
 
@@ -48,7 +48,7 @@ ament_target_dependencies(${PROJECT_NAME}_lib
 )
 
 target_link_libraries(${PROJECT_NAME}_lib
-  ${p73_walker_cc_LIBRARIES}
+  ${p73_cc_LIBRARIES}
   br_driver
 )
 

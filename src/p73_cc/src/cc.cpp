@@ -21,14 +21,14 @@
 // =====================================================================
 CustomController::CustomController(DataContainer &dc, RobotEigenData &rd)
     :   dc_(dc), rd_(rd),
-        env(ORT_LOGGING_LEVEL_WARNING, "p73_walker_cc"),
+        env(ORT_LOGGING_LEVEL_WARNING, "p73_cc"),
         memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
         session(nullptr)
 {
-    weight_dir_ = std::string(getenv("HOME")) + "/Walker_ws/src/p73_walker_cc/policy/policy.onnx";
+    weight_dir_ = std::string(getenv("HOME")) + "/Walker_ws/src/p73_cc/policy/policy.onnx";
 
     if (is_write_file_) {
-        writeFile.open("/tmp/p73_walker_cc_data.csv", ofstream::out);
+        writeFile.open("/tmp/p73_cc_data.csv", ofstream::out);
         writeFile << fixed << setprecision(8);
     }
 
@@ -42,7 +42,7 @@ CustomController::CustomController(DataContainer &dc, RobotEigenData &rd)
 // =====================================================================
 void CustomController::initVariable()
 {
-    cout << "[p73_walker_cc] Initializing variables" << endl;
+    cout << "[p73_cc] Initializing variables" << endl;
 
     q_default_p73_ <<  0.0,  0.36, 0.0,  0.77, -0.41, 0.0,
                        0.0, -0.36, 0.0, -0.77,  0.41, 0.0,
@@ -83,7 +83,7 @@ void CustomController::initVariable()
 void CustomController::loadOnnX()
 {
     string cur_path = weight_dir_;
-    cout << "[p73_walker_cc] Loading network from " << cur_path << endl;
+    cout << "[p73_cc] Loading network from " << cur_path << endl;
 
     Ort::SessionOptions session_options;
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_DISABLE_ALL);
@@ -108,10 +108,10 @@ void CustomController::loadOnnX()
         output_names[i] = name.get();
     }
 
-    cout << "[p73_walker_cc] Input names: ";
+    cout << "[p73_cc] Input names: ";
     copy(input_names.begin(), input_names.end(), ostream_iterator<string>(cout, " "));
     cout << endl;
-    cout << "[p73_walker_cc] Output names: ";
+    cout << "[p73_cc] Output names: ";
     copy(output_names.begin(), output_names.end(), ostream_iterator<string>(cout, " "));
     cout << endl;
 
@@ -129,15 +129,15 @@ void CustomController::loadOnnX()
     }
 
     if (input_policy_idx_ < 0)
-        throw std::runtime_error("[p73_walker_cc] ONNX input 'obs' or 'policy_obs_history' not found.");
+        throw std::runtime_error("[p73_cc] ONNX input 'obs' or 'policy_obs_history' not found.");
     if (output_actions_idx_ < 0)
-        throw std::runtime_error("[p73_walker_cc] ONNX output 'actions' not found.");
+        throw std::runtime_error("[p73_cc] ONNX output 'actions' not found.");
 
     for (size_t i = 0; i < input_number; ++i) {
         Ort::TypeInfo type_info = session.GetInputTypeInfo(i);
         auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
         std::vector<int64_t> input_shape = tensor_info.GetShape();
-        cout << "[p73_walker_cc] Input " << i << " (" << input_names[i] << ") shape: ";
+        cout << "[p73_cc] Input " << i << " (" << input_names[i] << ") shape: ";
         for (size_t k = 0; k < input_shape.size(); k++)
             cout << input_shape[k] << (k + 1 < input_shape.size() ? "x" : "");
         cout << endl;
@@ -160,14 +160,14 @@ void CustomController::loadOnnX()
         if (s.size() == 2 && s[1] > 0) {
             policy_obs_dim_ = static_cast<int>(s[1]);
             if (policy_obs_dim_ % num_single_obs != 0)
-                throw std::runtime_error("[p73_walker_cc] policy_obs_history dim must be divisible by 47.");
+                throw std::runtime_error("[p73_cc] policy_obs_history dim must be divisible by 47.");
             history_length_ = policy_obs_dim_ / num_single_obs;
-            cout << "[p73_walker_cc] Inferred policy_obs_dim=" << policy_obs_dim_
+            cout << "[p73_cc] Inferred policy_obs_dim=" << policy_obs_dim_
                  << " (history_length=" << history_length_ << ")" << endl;
         }
     }
 
-    cout << "[p73_walker_cc] Network loaded successfully." << endl;
+    cout << "[p73_cc] Network loaded successfully." << endl;
 }
 
 // =====================================================================
@@ -380,7 +380,7 @@ void CustomController::computeFast()
         noise_time_cur_ = control_time_us / 1e6;
         noise_time_pre_ = noise_time_cur_ - 0.001;
 
-        cout << "[p73_walker_cc] Mode started (is_on_robot=" << is_on_robot_ << ")" << endl;
+        cout << "[p73_cc] Mode started (is_on_robot=" << is_on_robot_ << ")" << endl;
 
         processNoise();
         processObservation();
@@ -560,8 +560,8 @@ void CustomController::startVelSubscriber()
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     });
-    cout << "[p73_walker_cc] Velocity command subscriber started on topic: p73/cmd_vel" << endl;
-    cout << "[p73_walker_cc] Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel" << endl;
+    cout << "[p73_cc] Velocity command subscriber started on topic: p73/cmd_vel" << endl;
+    cout << "[p73_cc] Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel" << endl;
 }
 
 void CustomController::stopVelSubscriber()

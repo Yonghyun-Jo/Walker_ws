@@ -15,6 +15,7 @@ def generate_launch_description():
  
     # Model file path
     model_file = os.path.join(p73_description_share, 'mujoco', 'p73_walker.xml')
+    # model_file = os.path.join(p73_description_share, 'mujoco', 'p73_walker_fixed.xml')
     urdf_path = os.path.join(p73_description_share, 'urdf', 'p73_walker.urdf')
 
     setting_sim_PDgain_path = os.path.join(p73_description_share, 'setting', 'setting_sim_PDgain.yaml')
@@ -24,7 +25,7 @@ def generate_launch_description():
         raise FileNotFoundError(f"Model file not found: {model_file}")
     if not os.path.exists(urdf_path):
         raise FileNotFoundError(f"URDF file not found: {urdf_path}")
-
+    
     # MuJoCo ROS2 node
     mujoco_node = Node(
         package='mjc_ros2',
@@ -50,7 +51,7 @@ def generate_launch_description():
                 'xml_path': model_file,
                 'sim_mode': True
             },
-            setting_sim_PDgain_path
+            setting_sim_PDgain_path,
         ]
     )
 

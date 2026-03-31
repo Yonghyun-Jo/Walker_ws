@@ -1,16 +1,18 @@
 #include "p73_controller/p73_controller.h"
 using namespace std;
 
-std::filesystem::path data_dir = "/home/bluerobin/ros2_ws/src/data/";
+std::filesystem::path data_dir = "/home/kwan/ros2_ws/src/p73_walker_controller/logging/data/";
 
 ofstream joint_desired_log(data_dir / "joint_desired_log.txt");
 ofstream joint_position_log(data_dir / "joint_position_log.txt");
 ofstream joint_velocity_log(data_dir / "joint_velocity_log.txt");
-ofstream torque_sum_log(data_dir / "torque_sum_log.txt");
+ofstream foot_traj_log(data_dir / "foot_traj_log.txt");
+ofstream torque_joint_log(data_dir / "torque_joint_log.txt");
+ofstream torque_motor_log(data_dir / "torque_motor_log.txt");
 
 P73Controller::P73Controller(StateEstimator &stm, rclcpp::Node::SharedPtr node)
     : stm_(stm), dc_(stm.dc_), rd_(stm.dc_.rd_), node_(node)
-    #ifdef COMPILE_P73_CC
+    #ifdef COMPILE_CC
     , cc_(*new CustomController(dc_, rd_))
     #endif
 {
@@ -103,10 +105,10 @@ void *P73Controller::TaskCtrlThread()
                     static Eigen::VectorQd q_init_ = Eigen::VectorQd::Zero();
                     static Eigen::VectorQd q_init_motor_ = Eigen::VectorQd::Zero();
 
-                    const int sinusoid_joint_target_ = 12;
-                    const double sinusoid_joint_min_ = 0.1;
-                    const double sinusoid_joint_max_ = 0.1;
-                    const double sinusoid_period_ = 1.5;
+                    const int sinusoid_joint_target_ = 5;
+                    const double sinusoid_joint_min_ = 0.2;
+                    const double sinusoid_joint_max_ = 0.2;
+                    const double sinusoid_period_ = 0.5;
 
                     if (is_pd_tune_init == true)
                     {
@@ -231,7 +233,6 @@ void *P73Controller::TaskCtrlThread()
                     joint_desired_log << rd_.q_desired(sinusoid_joint_target_) << std::endl;
                     joint_position_log << rd_.q_(sinusoid_joint_target_) << std::endl;
                     joint_velocity_log << rd_.q_dot_(sinusoid_joint_target_) << std::endl;
-                    torque_sum_log << rd_.torque_desired.head(12).transpose() << std::endl;
                 }
                 else if (dc_.task_cmd_.task_mode == 1)  // FRICTION COMPENSATION MODE
                 {
@@ -242,7 +243,7 @@ void *P73Controller::TaskCtrlThread()
                     static Eigen::VectorQd q_init_ = Eigen::VectorQd::Zero();
                     static Eigen::VectorQd q_init_motor_ = Eigen::VectorQd::Zero();
 
-                    const int friction_joint_target_ = 5;
+                    const int friction_joint_target_ = 12;
 
                     if (is_pd_tune_init == true)
                     {
@@ -327,9 +328,104 @@ void *P73Controller::TaskCtrlThread()
                     }
 
                 }
-                else if (dc_.task_cmd_.task_mode == 2)  // SIMPLE JOINT MOTION MODE
+                else if (dc_.task_cmd_.task_mode == 2)  // CHIRP DATA COLLECTION
                 {
+                    rd_.torque_desired.setZero();
 
+                    static bool is_chirp_init = true;
+                    static bool chirp_finished = false;
+                    static bool chirp_finish_printed = false;
+                    static double chirp_start_time = 0.0;
+
+                    static Eigen::VectorQd q_init_ = Eigen::VectorQd::Zero();
+                    static Eigen::VectorQd q_last_ = Eigen::VectorQd::Zero();
+
+                    // Chirp configuration
+                    const double chirp_amplitude_ = 0.05;  // [rad]
+                    const double chirp_f0_ = 0.10;         // [Hz]
+                    const double chirp_f1_ = 3.00;         // [Hz]
+                    const double chirp_duration_ = 30.0;   // [s]
+
+                    const double current_time = rd_.control_time_;
+
+                    if (is_chirp_init)
+                    {
+                        q_init_ = rd_.q_;
+                        chirp_start_time = current_time;
+                        chirp_finished = false;
+                        chirp_finish_printed = false;
+
+                        std::cout << "==========================================" << std::endl;
+                        std::cout << "======== CHIRP DATA COLLECTION MODE ======" << std::endl;
+                        std::cout << "EXCITED JOINTS : ALL" << std::endl;
+                        std::cout << "AMPLITUDE [rad]: " << chirp_amplitude_ << std::endl;
+                        std::cout << "FREQ START [Hz]: " << chirp_f0_ << std::endl;
+                        std::cout << "FREQ END   [Hz]: " << chirp_f1_ << std::endl;
+                        std::cout << "DURATION   [s] : " << chirp_duration_ << std::endl;
+                        std::cout << "==========================================" << std::endl;
+
+                        is_chirp_init = false;
+                    }
+
+                    rd_.q_desired = q_init_;
+
+                    // https://en.wikipedia.org/wiki/Chirp
+                    double t = current_time - chirp_start_time;
+                    const double k = (chirp_f1_ - chirp_f0_) / chirp_duration_;
+                    const double phase = 2.0 * M_PI * (chirp_f0_ * t + 0.5 * k * t * t);
+
+                    if (chirp_finished && !chirp_finish_printed)
+                    {
+                        std::cout << "CNTRL : Chirp data collection finished. Holding final pose." << std::endl;
+                        q_last_ = rd_.q_;
+                        chirp_finish_printed = true;
+                    }
+
+                    if (!chirp_finished)
+                    {
+                        if (t <= chirp_duration_)
+                        {
+                            const double chirp_pos = chirp_amplitude_ * std::sin(phase);
+                            for (int i = 0; i < MODEL_DOF; i++)
+                            {
+                                if(i == 0) 
+                                {
+                                    rd_.q_desired(i) = q_init_(i) + chirp_pos;
+                                }
+                                else if(i == 6)  
+                                {
+                                    rd_.q_desired(i) = q_init_(i) - chirp_pos;
+                                }
+                                else
+                                {
+                                    rd_.q_desired(i) = q_init_(i) + chirp_pos;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            chirp_finished = true;
+                            rd_.q_desired = q_last_;
+                        }
+                    }
+
+                    // Compute chirp torques for all joints in joint space.
+                    for (int i = 0; i < MODEL_DOF; i++)
+                    {
+                        rd_.torque_desired(i) = rd_.Kp_j[i] * (rd_.q_desired(i) - rd_.q_(i)) + rd_.Kd_j[i] * (0.0 - rd_.q_dot_(i));
+                    }
+
+                    // Log full vectors for all-joint identification.
+                    joint_desired_log << rd_.q_desired.transpose() << std::endl;
+                    joint_position_log << rd_.q_.transpose() << std::endl;
+                    joint_velocity_log << rd_.q_dot_.transpose() << std::endl;
+                    torque_joint_log << rd_.torque_desired.transpose() << " " << rd_.q_torque_.transpose() << std::endl;
+
+                    if (!dc_.simMode)
+                    {
+                        rd_.torque_desired = rd_.four_bar_Jaco_.transpose() * rd_.torque_desired;
+                        torque_motor_log << rd_.torque_desired.transpose() << " " << rd_.q_torque_motor_.transpose() << std::endl;
+                    }
                 }
                 else if (dc_.task_cmd_.task_mode == 3)  // IK MODE (FLOAT)
                 {
@@ -337,15 +433,40 @@ void *P73Controller::TaskCtrlThread()
                     static double time_init = 0.0;
 
                     constexpr double circle_period = 3.0;
-                    constexpr double circle_radius = 0.02;
+                    // constexpr double circle_radius = 0.02;
+                    // constexpr double circle_period = 1.0;
+                    constexpr double circle_radius = 0.05;
+
+
+                    static std::string urdf_path;
+                    static pinocchio::Model model_clik;
+                    static pinocchio::Data data_clik;
+                    static pinocchio::FrameIndex left_foot_frame_id;
+                    static pinocchio::FrameIndex right_foot_frame_id;
 
                     if (is_ik_init){
                         time_init = rd_.control_time_;
                         rd_.link_local_[Left_Foot].x_init = rd_.link_local_[Left_Foot].xpos;
                         rd_.link_local_[Right_Foot].x_init = rd_.link_local_[Right_Foot].xpos;
+                        rd_.link_local_[Left_Foot].rot_init = rd_.link_local_[Left_Foot].rotm;
+                        rd_.link_local_[Right_Foot].rot_init = rd_.link_local_[Right_Foot].rotm;
+
+                        node_->get_parameter("urdf_path", urdf_path);
+                        pinocchio::urdf::buildModel(urdf_path, model_clik);
+                        data_clik = pinocchio::Data(model_clik);
+
+                        left_foot_frame_id = model_clik.getFrameId("L_Foot_Link");
+                        right_foot_frame_id = model_clik.getFrameId("R_Foot_Link");
+
+                        std::cout << "left_foot_frame_id: " << left_foot_frame_id << std::endl;
+                        std::cout << "right_foot_frame_id: " << right_foot_frame_id << std::endl;
+
+                        rd_.q_desired = rd_.q_;
 
                         std::cout << "===================================" << std::endl;
                         std::cout << "========== IK FLOAT Mode ==========" << std::endl;
+                        std::cout << "===================================" << std::endl;
+                        std::cout << "CLIK MODEL PATH : " << urdf_path << std::endl;
                         std::cout << "===================================" << std::endl;
 
                         is_ik_init = false;
@@ -359,7 +480,6 @@ void *P73Controller::TaskCtrlThread()
                     const double phase_right_0 = M_PI;
 
                     rd_.link_local_[Left_Foot].x_traj = rd_.link_local_[Left_Foot].x_init;
-
                     rd_.link_local_[Right_Foot].x_traj = rd_.link_local_[Right_Foot].x_init;
 
                     rd_.link_local_[Left_Foot].x_traj(0)  += circle_radius * (std::cos(phase_left) - std::cos(phase_left_0));
@@ -367,26 +487,111 @@ void *P73Controller::TaskCtrlThread()
                     rd_.link_local_[Right_Foot].x_traj(0) += circle_radius * (std::cos(phase_right) - std::cos(phase_right_0));
                     rd_.link_local_[Right_Foot].x_traj(2) += circle_radius * (std::sin(phase_right) - std::sin(phase_right_0));
 
-                    rd_.J_task.setZero(12, MODEL_DOF_VIRTUAL);
-                    rd_.e_task.setZero(12);
-                    rd_.J_task.block(0, 0, 6, MODEL_DOF_VIRTUAL) = rd_.link_local_[Left_Foot].jac;
-                    rd_.J_task.block(6, 0, 6, MODEL_DOF_VIRTUAL) = rd_.link_local_[Right_Foot].jac;
-                    rd_.e_task.segment<3>(0) = rd_.link_local_[Left_Foot].x_traj - rd_.link_local_[Left_Foot].xpos;
-                    rd_.e_task.segment<3>(3) = -DyrosMath::getPhi(rd_.link_local_[Left_Foot].rotm, Eigen::Matrix3d::Identity());
-                    rd_.e_task.segment<3>(6) = rd_.link_local_[Right_Foot].x_traj - rd_.link_local_[Right_Foot].xpos;
-                    rd_.e_task.segment<3>(9) = -DyrosMath::getPhi(rd_.link_local_[Right_Foot].rotm, Eigen::Matrix3d::Identity());
+                    rd_.link_local_[Left_Foot].r_traj = rd_.link_local_[Left_Foot].rot_init;
+                    rd_.link_local_[Right_Foot].r_traj = rd_.link_local_[Right_Foot].rot_init;
 
-                    Eigen::MatrixXd J_task_joint = rd_.J_task.rightCols(MODEL_DOF);
-                    Eigen::VectorXd q_delta_joint = DyrosMath::pinv_SVD(J_task_joint) * rd_.e_task;
-                    rd_.q_desired += q_delta_joint / 1000.0;
+                    constexpr int clik_max_iter = 50;
+                    constexpr double clik_eps = 1e-4;
+                    constexpr double clik_step = 0.001;
+                    constexpr double clik_damp = 1e-6;
+
+                    Eigen::VectorQd q_clik = rd_.q_desired;
+
+                    rd_.J_task.setZero(12, MODEL_DOF);
+                    rd_.e_task.setZero(12);
+
+                    static Eigen::Vector3d left_x = Eigen::Vector3d::Zero();
+                    static Eigen::Vector3d right_x = Eigen::Vector3d::Zero();
+                    static Eigen::Matrix3d left_rot = Eigen::Matrix3d::Identity();
+                    static Eigen::Matrix3d right_rot = Eigen::Matrix3d::Identity();
+
+                    for (int clik_iter = 0; clik_iter < clik_max_iter; clik_iter++)
+                    {
+                        pinocchio::forwardKinematics(model_clik, data_clik, q_clik);
+                        pinocchio::updateFramePlacements(model_clik, data_clik);
+                        pinocchio::computeJointJacobians(model_clik, data_clik, q_clik);
+
+                        Eigen::MatrixXd J_left(6, MODEL_DOF);
+                        Eigen::MatrixXd J_right(6, MODEL_DOF);
+                        pinocchio::getFrameJacobian(model_clik, data_clik, left_foot_frame_id, pinocchio::LOCAL_WORLD_ALIGNED, J_left);
+                        pinocchio::getFrameJacobian(model_clik, data_clik, right_foot_frame_id, pinocchio::LOCAL_WORLD_ALIGNED, J_right);
+
+                        left_x = data_clik.oMf[left_foot_frame_id].translation();
+                        right_x = data_clik.oMf[right_foot_frame_id].translation();
+                        left_rot = data_clik.oMf[left_foot_frame_id].rotation();
+                        right_rot = data_clik.oMf[right_foot_frame_id].rotation();
+
+                        const double kp_pos = 100.0;
+                        const double kp_rot = 1.0;
+                        rd_.J_task.topRows(6) = J_left;
+                        rd_.J_task.bottomRows(6) = J_right;
+                        rd_.e_task.segment<3>(0) = kp_pos * (rd_.link_local_[Left_Foot].x_traj - left_x);
+                        const Eigen::Matrix3d left_R_err = left_rot.transpose() * rd_.link_local_[Left_Foot].r_traj;
+                        rd_.e_task.segment<3>(3) = kp_rot * pinocchio::log3(left_R_err);
+                        rd_.e_task.segment<3>(6) = kp_pos * (rd_.link_local_[Right_Foot].x_traj - right_x);
+                        const Eigen::Matrix3d right_R_err = right_rot.transpose() * rd_.link_local_[Right_Foot].r_traj;
+                        rd_.e_task.segment<3>(9) = kp_rot * pinocchio::log3(right_R_err);
+
+                        if (rd_.e_task.norm() < clik_eps)
+                        {
+                            break;
+                        }
+
+                        Eigen::MatrixXd JJt = rd_.J_task * rd_.J_task.transpose();
+                        Eigen::VectorQd q_delta_joint = rd_.J_task.transpose() * (JJt + clik_damp * Eigen::MatrixXd::Identity(12, 12)).ldlt().solve(rd_.e_task);
+                        Eigen::VectorQd v_clik = clik_step * q_delta_joint;
+                        q_clik = pinocchio::integrate(model_clik, q_clik, v_clik);
+                    }
+
+                    static int clik_print_count = 0;
+                    if ((clik_print_count++ % 1000) == 0)
+                    {
+                        std::cout << "========== CLIK LOG ==========" << std::endl;
+                        std::cout << "Target Joint Position " << q_clik.transpose() << std::endl;
+                        std::cout << "LeftFoot Position " << left_x.transpose() << std::endl;
+                        std::cout << "RightFoot Position " << right_x.transpose() << std::endl;
+                        std::cout << "LeftFoot PosTraj " <<  rd_.link_local_[Left_Foot].x_traj.transpose() << std::endl;
+                        std::cout << "RightFoot PosTraj " << rd_.link_local_[Right_Foot].x_traj.transpose() << std::endl;
+                        std::cout << "LeftFoot Rotation "  << std::endl << left_rot << std::endl;
+                        std::cout << "RightFoot Rotation " << std::endl << right_rot << std::endl;
+                        std::cout << "LeftFoot RotTraj "  << std::endl << rd_.link_local_[Left_Foot].r_traj << std::endl;
+                        std::cout << "RightFoot RotTraj " << std::endl << rd_.link_local_[Right_Foot].r_traj << std::endl;
+                        std::cout << "CLIK final error: " << rd_.e_task.transpose() << std::endl;
+                        std::cout << "=============================" << std::endl;
+                    }
+
+                    if(q_clik.allFinite())
+                    {
+                        rd_.q_desired = q_clik;
+                    }
+                    else
+                    {
+                        static bool nan_warning_printed = false;
+                        static Eigen::VectorQd q_last = Eigen::VectorQd::Zero();
+                        if (!nan_warning_printed)                        {
+                            std::cout << "CNTRL WARNING: CLIK solution contains NaN. Holding current joint position." << std::endl;
+                            q_last = rd_.q_;
+                            nan_warning_printed = true;
+                        }
+                        rd_.q_desired = q_last;
+                    }
 
                     for (int i = 0; i < MODEL_DOF; i++) {
                         rd_.torque_desired(i) = rd_.Kp_j[i] * (rd_.q_desired(i) - rd_.q_(i)) + rd_.Kd_j[i] * (0.0 - rd_.q_dot_(i));
                     }
 
+                    joint_desired_log << rd_.q_desired.transpose() << std::endl;
+                    joint_position_log << rd_.q_.transpose() << std::endl;
+                    joint_velocity_log << rd_.q_dot_.transpose() << std::endl;
+                    foot_traj_log << rd_.link_local_[Left_Foot].x_traj.transpose() << " " << rd_.link_local_[Right_Foot].x_traj.transpose()  << " " 
+                                  << rd_.link_local_[Left_Foot].xpos.transpose() << " " << rd_.link_local_[Right_Foot].xpos.transpose() << std::endl;
+                    torque_joint_log << rd_.torque_desired.transpose() << " " << rd_.q_torque_.transpose() << std::endl;
+
                     if(!dc_.simMode){
                         rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, rd_.torque_desired);
+                        torque_motor_log << rd_.torque_desired.transpose() << " " << rd_.q_torque_motor_.transpose() << std::endl;
                     }
+
                 }
                 else if (dc_.task_cmd_.task_mode == 4)  // IK MODE (CONTACT)
                 {
@@ -423,8 +628,8 @@ void *P73Controller::TaskCtrlThread()
                         rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, rd_.torque_desired);
                     }
                 }
-#ifdef COMPILE_P73_CC
-                if (dc_.task_cmd_.task_mode >= 5 && dc_.task_cmd_.task_mode < 10)
+#ifdef COMPILE_CC
+                else if (dc_.task_cmd_.task_mode >= 5 && dc_.task_cmd_.task_mode < 10)
                 {
                     try {
                         cc_.computeFast();
@@ -435,10 +640,7 @@ void *P73Controller::TaskCtrlThread()
                         std::cerr << e.what() << '\n';
                         dc_.positionHoldSwitch = true;
                     }
-
-                    if (!dc_.simMode) {
-                        rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, rd_.torque_desired);
-                    }
+                    
                 }
 #endif
             }
@@ -555,9 +757,6 @@ void P73Controller::taskCmdCallback(const p73_msgs::msg::TaskCmd::SharedPtr msg)
     dc_.tc_mode = true;
     dc_.ik_mode = false;
     dc_.task_cmd_ = *msg;
-#ifdef COMPILE_P73_CC
-    cc_.cc_init_ = true;
-#endif
     cout << "CNTRL : task signal received mode :" << dc_.task_cmd_.task_mode << endl;
     stm_.StatusPub("CNTRL : task Control mode : %d", dc_.task_cmd_.task_mode);
 }

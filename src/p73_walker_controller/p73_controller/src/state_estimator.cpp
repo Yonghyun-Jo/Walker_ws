@@ -18,7 +18,7 @@ StateEstimator::StateEstimator(DataContainer &dc)
     model_local_ = model_;
     data_local_ = data_;  
 
-    bool pinocchio_model_checker = true;
+    bool pinocchio_model_checker = false;
 
     if (model_.nv == MODEL_DOF_VIRTUAL)
     {
@@ -233,6 +233,32 @@ StateEstimator::StateEstimator(DataContainer &dc)
         std::cout << std::fixed << std::setprecision(3) << param << " ";
     std::cout << std::endl;
 
+    //--- Joint limits
+    const Eigen::VectorXd q_lower = model_.lowerPositionLimit;
+    const Eigen::VectorXd q_upper = model_.upperPositionLimit;
+    const Eigen::VectorXd v_limit = model_.velocityLimit;
+    rd_global_.q_min.resize(MODEL_DOF);
+    rd_global_.q_max.resize(MODEL_DOF);
+    rd_global_.q_dot_max.resize(MODEL_DOF);
+    for (int i = 0; i < MODEL_DOF; ++i) {
+        rd_global_.q_min[i] = q_lower(7 + i);
+        rd_global_.q_max[i] = q_upper(7 + i);
+        rd_global_.q_dot_max[i] = v_limit(6 + i);
+    }
+
+    std::cout << "q_min: " << " (size=" << rd_global_.q_min.size() << "): ";
+    for (const auto &param : rd_global_.q_min)
+        std::cout << std::fixed << std::setprecision(3) << param << " ";
+    std::cout << std::endl;
+    std::cout << "q_max: " << " (size=" << rd_global_.q_max.size() << "): ";
+    for (const auto &param : rd_global_.q_max)
+        std::cout << std::fixed << std::setprecision(3) << param << " ";
+    std::cout << std::endl;
+    std::cout << "q_dot_max: " << " (size=" << rd_global_.q_dot_max.size() << "): ";
+    for (const auto &param : rd_global_.q_dot_max)
+        std::cout << std::fixed << std::setprecision(3) << param << " ";
+    std::cout << std::endl;
+
     //--- Torque limit
     dc_.node_->declare_parameter<std::vector<double>>("torque_limit", std::vector<double>(MODEL_DOF, 0.0));
     dc_.node_->get_parameter("torque_limit", torque_limit);
@@ -240,6 +266,11 @@ StateEstimator::StateEstimator(DataContainer &dc)
     for (const auto &param : torque_limit)
         std::cout << std::fixed << std::setprecision(3) << param << " ";
     std::cout << std::endl;
+
+    //--- Pose handling option
+    dc_.node_->declare_parameter<bool>("zero_rpy_for_circular_traj", true);
+    dc_.node_->get_parameter("zero_rpy_for_circular_traj", zero_rpy_for_circular_traj_);
+    std::cout << "zero_rpy_for_circular_traj: " << (zero_rpy_for_circular_traj_ ? "true" : "false") << std::endl;
 }
 
 StateEstimator::~StateEstimator()
@@ -289,12 +320,15 @@ void *StateEstimator::StateEstimatorThread()
         SendCommand();
         auto d3 = chrono::duration_cast<chrono::microseconds>(chrono::steady_clock::now() - t3).count();
 
-        if ((d0 + d1 + d2 + d3) > 1000)
+        if (!dc_.simMode)
         {
-            if (control_time_ > 0.1)
-                printf(" STATE : %7.1f stm over 1000, d0 : %ld, d1 : %ld, d2 : %ld, d3 : %ld\n", control_time_, d0, d1, d2, d3);
+
+            if ((d0 + d1 + d2 + d3) > 1000)
+            {
+                if (control_time_ > 0.1)
+                    printf(" STATE : %7.1f stm over 1000, d0 : %ld, d1 : %ld, d2 : %ld, d3 : %ld\n", control_time_, d0, d1, d2, d3);
+            }
         }
-        
         // Sleep to maintain loop rate
         auto loop_end = std::chrono::steady_clock::now();
         auto loop_duration = std::chrono::duration_cast<std::chrono::microseconds>(loop_end - loop_start).count();
@@ -352,13 +386,15 @@ void StateEstimator::GetRobotData()
                 const int actuator_idx = P73::ELMO_2_JOINT[i];
                 q_motor_(i) = robot_data.joint.position_external[actuator_idx];
                 q_dot_motor_(i) = robot_data.joint.velocity[actuator_idx];
-                q_torque_(i) = robot_data.joint.torque[actuator_idx];
+                q_torque_motor_(i) = robot_data.joint.torque[actuator_idx];
                 elmo_state[i] = getElmoState(robot_data.joint.status_word[actuator_idx]);
             }
 
             four_bar_kinematics_.Motor2JointPosVel(q_motor_, q_, q_dot_motor_, q_dot_);
             four_bar_Jaco_ = four_bar_kinematics_.getFourBarJaco();
             four_bar_Jaco_inv_ = four_bar_Jaco_.inverse();
+
+            q_torque_ = four_bar_Jaco_.transpose().inverse() * q_torque_motor_;
         }                  
 
         //---Joint armature
@@ -379,11 +415,8 @@ void StateEstimator::GetRobotData()
         // std::cout << std::defaultfloat;
         // std::cout << " " << std::endl;
 
-        // Map code order (MuJoCo) → Pinocchio order for kinematics
-        for (int i = 0; i < MODEL_DOF; i++) {
-            q_virtual_local_(7 + P73::PINOCCHIO_IDX_FOR_CODE[i]) = q_(i);
-            q_dot_virtual_local_(6 + P73::PINOCCHIO_IDX_FOR_CODE[i]) = q_dot_(i);
-        }  
+        q_virtual_local_.segment(7, MODEL_DOF) = q_;
+        q_dot_virtual_local_.segment(6, MODEL_DOF) = q_dot_;  
 
         if (dc_.useMjcVirtual)
         {
@@ -452,6 +485,15 @@ void StateEstimator::InitYaw()
 
     tf2::Quaternion q_mod;
     rd_.yaw = rd_.yaw - rd_.yaw_init;
+
+    if (zero_rpy_for_circular_traj_)
+    {
+        // Keep pelvis orientation fixed to zero for circular trajectory mode.
+        rd_.roll = 0.0;
+        rd_.pitch = 0.0;
+        rd_.yaw = 0.0;
+    }
+
     q_mod.setRPY(rd_.roll, rd_.pitch, rd_.yaw);
 
     q_virtual_local_(3) = q_mod.getX();
@@ -526,12 +568,12 @@ void StateEstimator::StateEstimate()
         static Eigen::MatrixXd Q_;  Q_.setIdentity(num_state, num_state); 
         static Eigen::MatrixXd R_;  R_.setIdentity(num_observe, num_observe); 
         
-        double imuProcessNoisePosition_ = 0.1;
+        double imuProcessNoisePosition_ = 0.02;
         double imuProcessNoiseVelocity_ = 0.02;
         double footProcessNoisePosition_ = 0.002;
         
-        double footSensorNoisePosition_ = 0.001;
-        double footSensorNoiseVelocity_ = 0.2;
+        double footSensorNoisePosition_ = 0.5;
+        double footSensorNoiseVelocity_ = 0.1;
         double footHeightSensorNoise_ = 0.01;
 
         Q_.block(0, 0, 3, 3) *= imuProcessNoisePosition_;
@@ -553,6 +595,7 @@ void StateEstimator::StateEstimate()
             int rIndex1 = i1;
             int rIndex2 = dim_contacts + i1;
             int rIndex3 = 2 * dim_contacts + i;
+            // bool isContact = rd_global_.ee_[i].contact;
             bool isContact = rd_global_.ee_[i].contact;
 
             double high_suspect_number = 100.0;
@@ -595,6 +638,9 @@ void StateEstimator::StateEstimate()
             q_virtual_.segment(0, 3)     = x_hat_.segment(0, 3);
             q_dot_virtual_.segment(0, 3) = x_hat_.segment(3, 3);
         }
+
+        static ofstream log_file("/home/kwan/ros2_ws/src/p73_walker_controller/logging/data/state_estimate_log.txt");
+        log_file << x_hat_.segment(0, 6).transpose() << " " << q_virtual_mjc_.segment(0, 3).transpose() << " " << q_dot_virtual_mjc_.segment(0,3).transpose() << std::endl; 
     }
     else
     {
@@ -657,6 +703,11 @@ void StateEstimator::UpdateDynamics()
     A_inv_ = A_.inverse();
     C_ = pinocchio::computeCoriolisMatrix(model_, data_, q_virtual_, q_dot_virtual_); 
     G_ = pinocchio::computeGeneralizedGravity(model_, data_, q_virtual_);
+
+    pinocchio::computeCentroidalMomentum(model_, data_, q_virtual_, q_dot_virtual_);
+    centroidal_momentum_         = data_.hg.toVector();   // 6x1 = [angular; linear]
+    centroidal_angular_momentum_ = data_.hg.angular();    // 3x1
+    centroidal_linear_momentum_  = data_.hg.linear();     // 3x1
 }
 
 void StateEstimator::StoreState(RobotEigenData &rd_global_)
@@ -677,17 +728,21 @@ void StateEstimator::StoreState(RobotEigenData &rd_global_)
     memcpy(&rd_global_.A_inv_, &A_inv_, sizeof(MatrixVVd));
     memcpy(&rd_global_.C_,     &C_,     sizeof(MatrixVVd));
     memcpy(&rd_global_.G_,     &G_,     sizeof(VectorVQd));  
+
+    memcpy(&rd_global_.centroidal_momentum_, &centroidal_momentum_, sizeof(Eigen::Vector6d));
+    memcpy(&rd_global_.centroidal_angular_momentum_, &centroidal_angular_momentum_, sizeof(Eigen::Vector3d));
+    memcpy(&rd_global_.centroidal_linear_momentum_, &centroidal_linear_momentum_, sizeof(Eigen::Vector3d));
     
     memcpy(&rd_global_.four_bar_Jaco_, &four_bar_Jaco_, sizeof(MatrixQQd));  
     memcpy(&rd_global_.four_bar_Jaco_inv_, &four_bar_Jaco_inv_, sizeof(MatrixQQd));  
 
     for (int i = 0; i < (LINK_NUMBER + 1); i++)
     {
-        memcpy(&rd_global_.link_local_[i].jac,  &link_[i].jac, sizeof(Matrix6Vd));
-        memcpy(&rd_global_.link_local_[i].xpos, &link_[i].xpos, sizeof(Vector3d));
-        memcpy(&rd_global_.link_local_[i].rotm, &link_[i].rotm, sizeof(Matrix3d));
-        memcpy(&rd_global_.link_local_[i].v,    &link_[i].v, sizeof(Vector3d));
-        memcpy(&rd_global_.link_local_[i].w,    &link_[i].w, sizeof(Vector3d));
+        memcpy(&rd_global_.link_local_[i].jac,  &link_local_[i].jac, sizeof(Matrix6Vd));
+        memcpy(&rd_global_.link_local_[i].xpos, &link_local_[i].xpos, sizeof(Vector3d));
+        memcpy(&rd_global_.link_local_[i].rotm, &link_local_[i].rotm, sizeof(Matrix3d));
+        memcpy(&rd_global_.link_local_[i].v,    &link_local_[i].v, sizeof(Vector3d));
+        memcpy(&rd_global_.link_local_[i].w,    &link_local_[i].w, sizeof(Vector3d));
     }
 
     memcpy(&rd_global_.q_, &q_, sizeof(VectorQd));
@@ -695,26 +750,16 @@ void StateEstimator::StoreState(RobotEigenData &rd_global_)
     memcpy(&rd_global_.q_motor_, &q_motor_, sizeof(VectorQd));
     memcpy(&rd_global_.q_dot_motor_, &q_dot_motor_, sizeof(VectorQd));
     memcpy(&rd_global_.q_torque_, &q_torque_, sizeof(VectorQd));
-
-    // q_virtual_ is in Pinocchio order (for kinematics).
-    // rd_global_.q_virtual_ must be in code order (MuJoCo/IsaacLab) for cc and controller.
-    {
-        VectorQVQd q_virtual_code = q_virtual_;
-        VectorVQd q_dot_virtual_code = q_dot_virtual_;
-        for (int i = 0; i < MODEL_DOF; i++) {
-            q_virtual_code(7 + i) = q_virtual_(7 + P73::PINOCCHIO_IDX_FOR_CODE[i]);
-            q_dot_virtual_code(6 + i) = q_dot_virtual_(6 + P73::PINOCCHIO_IDX_FOR_CODE[i]);
-        }
-        memcpy(&rd_global_.q_virtual_, &q_virtual_code, sizeof(VectorQVQd));
-        memcpy(&rd_global_.q_dot_virtual_, &q_dot_virtual_code, sizeof(VectorVQd));
-    }
+    memcpy(&rd_global_.q_torque_motor_, &q_torque_motor_, sizeof(VectorQd));
+    memcpy(&rd_global_.q_virtual_, &q_virtual_, sizeof(VectorQVQd));
+    memcpy(&rd_global_.q_dot_virtual_, &q_dot_virtual_, sizeof(VectorVQd));
 
     rd_global_.roll = rd_.roll;
     rd_global_.pitch = rd_.pitch;
     rd_global_.yaw = rd_.yaw;
 
     rd_global_.control_time_ = control_time_;
-    rd_global_.control_time_us_ = static_cast<int64_t>(control_time_ * 1e6);
+    rd_global_.control_time_us_ = static_cast<float>(control_time_ * 1.0e6);
 
     if (!rd_global_.firstCalc)
     {

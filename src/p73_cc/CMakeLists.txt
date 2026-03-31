@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(p73_walker_cc)
+project(p73_cc)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,7 +69,7 @@ install(DIRECTORY policy/
   DESTINATION share/${PROJECT_NAME}/policy
 )
 
-# Export for find_package(p73_walker_cc)
+# Export for find_package(p73_cc)
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME} onnxruntime)
 ament_export_dependencies(rclcpp geometry_msgs p73_lib p73_msgs)
