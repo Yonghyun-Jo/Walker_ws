@@ -506,7 +506,120 @@ void CustomController::computeFast()
         rd_.torque_desired = torque_rl_;
     }
 
-    // Debug
+    // 4-bar linkage: joint torque → motor torque (real robot only)
+    if (is_on_robot_) {
+        rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, rd_.torque_desired);
+    }
+
+    // ====== Data logging (every tick, ~1kHz) ======
+    static std::ofstream log_file;
+    static bool log_opened = false;
+    if (!log_opened) {
+        std::string path = is_on_robot_
+            ? "/tmp/p73_realrobot_log.csv"
+            : "/tmp/p73_mujoco_log.csv";
+        log_file.open(path, std::ios::out);
+        log_file << std::fixed << std::setprecision(8);
+        // Header
+        log_file << "time";
+        // IMU quaternion (xyzw)
+        log_file << ",quat_x,quat_y,quat_z,quat_w";
+        // Angular velocity body frame (from q_dot_virtual_)
+        log_file << ",ang_vel_bx,ang_vel_by,ang_vel_bz";
+        // Projected gravity body frame
+        log_file << ",proj_grav_x,proj_grav_y,proj_grav_z";
+        // Velocity command
+        log_file << ",cmd_vx,cmd_vy,cmd_vyaw";
+        // Gait phase
+        log_file << ",gait_sin,gait_cos";
+        // Joint pos (13 DOF, raw)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << ",q_raw_" << i;
+        // Joint pos relative to default (12)
+        for (int i = 0; i < 12; i++) log_file << ",q_rel_" << i;
+        // Joint vel (13 DOF, raw from noise processing)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << ",qdot_" << i;
+        // Policy obs frame (47D, what actually goes into network)
+        for (int i = 0; i < num_single_obs; i++) log_file << ",obs_" << i;
+        // RL actions (12)
+        for (int i = 0; i < num_action; i++) log_file << ",action_" << i;
+        // Torque desired BEFORE 4-bar (joint space, 13)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << ",tau_joint_" << i;
+        // Torque desired AFTER 4-bar (what actually gets sent, 13)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << ",tau_motor_" << i;
+        // Linear velocity world frame (for critic/debug)
+        log_file << ",lin_vel_wx,lin_vel_wy,lin_vel_wz";
+        // Value function output
+        log_file << ",value";
+        log_file << "\n";
+        log_opened = true;
+        cout << "[p73_cc] Logging to: " << path << endl;
+    }
+
+    if (log_file.is_open()) {
+        // Recompute quantities for logging (some already in policy_frame_)
+        Quaterniond q_log;
+        q_log.x() = rd_.q_virtual_(3);
+        q_log.y() = rd_.q_virtual_(4);
+        q_log.z() = rd_.q_virtual_(5);
+        q_log.w() = rd_.q_virtual_(6);
+        Vector3d ang_vel_log = rd_.q_dot_virtual_.segment<3>(3);
+        Vector3d g_w_log(0.0, 0.0, -1.0);
+        Vector3d proj_grav_log = quatRotateInverse(q_log, g_w_log);
+        Vector3d lin_vel_w_log = rd_.q_dot_virtual_.segment<3>(0);
+
+        // Torque before 4-bar (reconstruct from torque_rl_ or torque_spline_)
+        VectorQd tau_joint = (control_time_us < start_time_ + 0.1e6) ? torque_spline_ : torque_rl_;
+
+        double local_vx, local_vy, local_vyaw;
+        {
+            std::lock_guard<std::mutex> lock(vel_mutex_);
+            local_vx = target_vel_x_;
+            local_vy = target_vel_y_;
+            local_vyaw = target_vel_yaw_;
+        }
+
+        double cmd_n = std::sqrt(local_vx*local_vx + local_vy*local_vy + local_vyaw*local_vyaw);
+        double ph = 0.0;
+        if (cmd_n > cmd_zero_max_)
+            ph = static_cast<double>(gait_step_counter_ % gait_period_steps_) / static_cast<double>(gait_period_steps_);
+
+        log_file << control_time_us / 1e6;
+        // Quaternion
+        log_file << "," << q_log.x() << "," << q_log.y() << "," << q_log.z() << "," << q_log.w();
+        // Ang vel body
+        log_file << "," << ang_vel_log(0) << "," << ang_vel_log(1) << "," << ang_vel_log(2);
+        // Projected gravity
+        log_file << "," << proj_grav_log(0) << "," << proj_grav_log(1) << "," << proj_grav_log(2);
+        // Cmd vel
+        log_file << "," << local_vx << "," << local_vy << "," << local_vyaw;
+        // Gait
+        log_file << "," << std::sin(2.0*M_PI*ph) << "," << std::cos(2.0*M_PI*ph);
+        // Joint pos raw (13)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << "," << rd_.q_(i);
+        // Joint pos relative (12)
+        for (int i = 0; i < 12; i++) log_file << "," << (q_noise_(i) - q_default_isaac_(i));
+        // Joint vel (13)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << "," << q_vel_noise_(i);
+        // Policy frame (47D)
+        for (int i = 0; i < num_single_obs; i++) log_file << "," << policy_frame_[i];
+        // Actions (12)
+        for (int i = 0; i < num_action; i++) log_file << "," << rl_action_(i);
+        // Torque joint space (13)
+        for (int i = 0; i < MODEL_DOF; i++) log_file << "," << tau_joint(i);
+        // Torque motor space (13) - what actually gets sent
+        for (int i = 0; i < MODEL_DOF; i++) log_file << "," << rd_.torque_desired(i);
+        // Lin vel world
+        log_file << "," << lin_vel_w_log(0) << "," << lin_vel_w_log(1) << "," << lin_vel_w_log(2);
+        // Value
+        log_file << "," << value_;
+        log_file << "\n";
+
+        // Flush every 100 ticks (~10Hz) to avoid losing data on crash
+        static int flush_cnt = 0;
+        if (++flush_cnt % 100 == 0) log_file.flush();
+    }
+
+    // Debug console
     static int dbg = 0;
     if (dbg++ % 500 == 0) {
         Eigen::IOFormat fmt(3, 0, " ", " ");

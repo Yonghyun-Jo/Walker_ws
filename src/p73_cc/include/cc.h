@@ -2,6 +2,7 @@
 #define p73_cc_H
 
 #include "p73_lib/robot_data.h"
+#include "wholebody_functions.h"
 #include "onnxruntime_cxx_api.h"
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
