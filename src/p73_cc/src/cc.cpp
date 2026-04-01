@@ -515,9 +515,15 @@ void CustomController::computeFast()
     static std::ofstream log_file;
     static bool log_opened = false;
     if (!log_opened) {
-        std::string path = is_on_robot_
-            ? "/tmp/p73_realrobot_log.csv"
-            : "/tmp/p73_mujoco_log.csv";
+        std::string log_dir = std::string(getenv("HOME")) + "/Walker_ws/src/p73_cc/logs";
+        auto now = std::chrono::system_clock::now();
+        auto t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_buf;
+        localtime_r(&t, &tm_buf);
+        char ts[32];
+        std::strftime(ts, sizeof(ts), "%y%m%d_%H%M%S", &tm_buf);
+        std::string prefix = is_on_robot_ ? "realrobot" : "mujoco";
+        std::string path = log_dir + "/" + prefix + "_" + ts + ".csv";
         log_file.open(path, std::ios::out);
         log_file << std::fixed << std::setprecision(8);
         // Header
