@@ -82,7 +82,7 @@ public:
     static const int num_action = 12;         // lower body RL-controlled
     static const int num_single_obs = 47;
 
-    int history_length_ = 5;     // overwritten from ONNX shape
+    int history_length_ = 10;     // overwritten from ONNX shape
     int policy_obs_dim_ = num_single_obs * 5;
 
     //////////////////////// Observation Buffers ////////////////////////

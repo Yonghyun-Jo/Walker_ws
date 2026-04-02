@@ -6,15 +6,21 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QFont>
+#include <algorithm>
 #include <cmath>
 
 MainWindow::MainWindow(QWidget* parent)
   : QMainWindow(parent), rclcpp::Node("p73_gui_node"), ui_(new Ui::MainWindow)
 {
     ui_->setupUi(this);
+
+	QFont base_font = this->font();
+	base_font.setPointSize(6);
+	this->setFont(base_font);
     
     // Set initial window size (width, height)
-    resize(1600, 1000);
+    resize(800, 600);
     // Set minimum window size to prevent too small windows
     setMinimumSize(800, 600);
 
@@ -27,23 +33,15 @@ MainWindow::MainWindow(QWidget* parent)
 	connect(ui_->taskSendBtn, &QPushButton::clicked, this, &MainWindow::taskModeSend);
 	connect(ui_->posCtrlBtn, &QPushButton::clicked, this, &MainWindow::posCtrlModeSend);
 	connect(ui_->jointSendBtn, &QPushButton::clicked, this, &MainWindow::jointSendModeSend);
-	connect(ui_->gravCompBtn, &QPushButton::clicked, this, &MainWindow::gravCtrlModeSend);
 
 	connect(ui_->initPoseBtn, &QPushButton::clicked, this, [this]() { posModeSend(init_pos_); });
-	connect(ui_->pos1Btn, &QPushButton::clicked, this, [this]() { posModeSend(left_hand_up_); });
-	connect(ui_->pos2Btn, &QPushButton::clicked, this, [this]() { posModeSend(right_hand_up_); });
-	connect(ui_->pos3Btn, &QPushButton::clicked, this, [this]() { posModeSend(both_hands_up_); });
 	connect(ui_->zeroPoseBtn, &QPushButton::clicked, this, [this]() { posModeSend(zero_pos_); });
-
-	connect(ui_->gwBtn, &QPushButton::clicked, this, &MainWindow::gwIkTestmodeSend);
 
 	// ROS 2 Publishers
     ctrl_mode_pub_ = create_publisher<std_msgs::msg::UInt32>("p73/ctrlMode", 10);
     task_cmd_pub_ = create_publisher<p73_msgs::msg::TaskCmd>("p73/taskCommand", 10);
     pos_cmd_pub_ = create_publisher<p73_msgs::msg::PosCmd>("p73/posCommand", 10);
 	gui_cmd_pub_ = create_publisher<std_msgs::msg::String>("p73/guiCommand", 10);
-
-    iktask_mode_pub_ = create_publisher<p73_msgs::msg::IKTaskCmd>("p73/ikTaskmode", 10);
 
     // ROS 2 Subscribers
     ctrl_time_sub_ = create_subscription<std_msgs::msg::Float32>(
@@ -64,6 +62,7 @@ MainWindow::MainWindow(QWidget* parent)
 	pelv_state_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
 		"p73/pelvState", 10, 
 		std::bind(&MainWindow::pelvStateCallback, this, std::placeholders::_1));
+		
 	imu_state_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
 		"p73/imuState", 10, 
 		std::bind(&MainWindow::imuStateCallback, this, std::placeholders::_1));
@@ -73,59 +72,40 @@ MainWindow::MainWindow(QWidget* parent)
 		std::bind(&MainWindow::statusLogCallback, this, std::placeholders::_1));
 
 	// Setup elmo state labels
-	elmo_state_labels.resize(32);
-	elmo_ctrl_state_labels.resize(32);
+	elmo_state_labels.resize(MainWindow::DOF_NUM);
+	elmo_ctrl_state_labels.resize(MainWindow::DOF_NUM);
 	setupElmoLabels(elmo_state_labels, 0, 6, ui_->leftleg_safety);
 	setupElmoLabels(elmo_ctrl_state_labels, 0, 6, ui_->leftleg_elmo);
 	setupElmoLabels(elmo_state_labels, 6, 6, ui_->rightleg_safety);
 	setupElmoLabels(elmo_ctrl_state_labels, 6, 6, ui_->rightleg_elmo);
-	setupElmoLabels(elmo_state_labels, 12, 3, ui_->waist_safety);
-	setupElmoLabels(elmo_ctrl_state_labels, 12, 3, ui_->waist_elmo);
-	setupElmoLabels(elmo_state_labels, 15, 7, ui_->leftarm_safety);
-	setupElmoLabels(elmo_ctrl_state_labels, 15, 7, ui_->leftarm_elmo);
-	setupElmoLabels(elmo_state_labels, 22, 7, ui_->rightarm_safety);
-	setupElmoLabels(elmo_ctrl_state_labels, 22, 7, ui_->rightarm_elmo);
-	setupElmoLabels(elmo_state_labels, 29, 3, ui_->head_safety);
-	setupElmoLabels(elmo_ctrl_state_labels, 29, 3, ui_->head_elmo);
+	setupElmoLabels(elmo_state_labels, 12, 1, ui_->waist_safety);
+	setupElmoLabels(elmo_ctrl_state_labels, 12, 1, ui_->waist_elmo);
 
 	// Initialize joint label groups with appropriate sizes
 	lleg_labels = JointLabels(6);   // 6 DOF for legs
 	rleg_labels = JointLabels(6);
-	larm_labels = JointLabels(7);   // 7 DOF for arms  
-	rarm_labels = JointLabels(7);
-	waist_labels = JointLabels(3);  // 3 DOF for waist
-	neck_labels = JointLabels(3);   // 3 DOF for neck
+	waist_labels = JointLabels(1);  // 1 DOF for waist
 
 	// Setup all joint label groups
 	setupJointLabels(lleg_labels, 6, ui_->position_layout, ui_->velocity_layout, ui_->torque_layout);
 	setupJointLabels(rleg_labels, 6, ui_->position_layout_4, ui_->velocity_layout_4, ui_->torque_layout_4);
-	setupJointLabels(larm_labels, 7, ui_->position_layout_6, ui_->velocity_layout_6, ui_->torque_layout_6);
-	setupJointLabels(rarm_labels, 7, ui_->position_layout_5, ui_->velocity_layout_5, ui_->torque_layout_5);
-	setupJointLabels(waist_labels, 3, ui_->position_layout_7, ui_->velocity_layout_7, ui_->torque_layout_7);
-	setupJointLabels(neck_labels, 3, ui_->position_layout_8, ui_->velocity_layout_8, ui_->torque_layout_8);
+	setupJointLabels(waist_labels, 1, ui_->position_layout_7, ui_->velocity_layout_7, ui_->torque_layout_7);
 
-	joint_pos_cmd_spinboxes.resize(32);
+	joint_pos_cmd_spinboxes.resize(MainWindow::DOF_NUM);
 	
 	// Setup spinboxes for joint position commands
 	setupSpinBoxes(0, 6, ui_->formLayout); // Left leg
 	setupSpinBoxes(6, 6, ui_->formLayout_2); // Right leg
-	setupSpinBoxes(12, 3, ui_->formLayout_5); // Waist
-	setupSpinBoxes(15, 7, ui_->formLayout_3); // Left arm
-	setupSpinBoxes(22, 3, ui_->formLayout_6); // Neck
-	setupSpinBoxes(25, 7, ui_->formLayout_4); // Right arm
+	setupSpinBoxes(12, 1, ui_->formLayout_5); // Waist
 
 	// Setup pelv state labels
-	pelv_state_labels.resize(12);
+	pelv_state_labels.resize(6);
 	imu_state_labels.resize(9);
 	for (int i = 0; i < 3; i++) {
 		pelv_state_labels[i] = new QLabel(ui_->comPos->parentWidget());
 		ui_->comPos->addWidget(pelv_state_labels[i]);
 		pelv_state_labels[i+3] = new QLabel(ui_->linVel->parentWidget());
 		ui_->linVel->addWidget(pelv_state_labels[i+3]);
-		pelv_state_labels[i+6] = new QLabel(ui_->comPos_2->parentWidget());
-		ui_->comPos_2->addWidget(pelv_state_labels[i+6]);
-		pelv_state_labels[i+9] = new QLabel(ui_->linVel_2->parentWidget());
-		ui_->linVel_2->addWidget(pelv_state_labels[i+9]);
 
 		imu_state_labels[i] = new QLabel(ui_->imuQuaternion->parentWidget());
 		ui_->imuQuaternion->addWidget(imu_state_labels[i]);
@@ -134,16 +114,6 @@ MainWindow::MainWindow(QWidget* parent)
 		imu_state_labels[i+6] = new QLabel(ui_->imuLinAcc->parentWidget());
 		ui_->imuLinAcc->addWidget(imu_state_labels[i+6]);
 	}
-	// imu_state_labels[3] = new QLabel(ui_->imuQuaternion->parentWidget());
-	// ui_->imuQuaternion->addWidget(imu_state_labels[3]);
-	
-	// Setup IK target combobox with custom data
-	// Index 0 (Pelvis) -> actual value 0
-	ui_->ikTarget->setItemData(0, 0);
-	// Index 1 (Left Hand) -> actual value 22
-	ui_->ikTarget->setItemData(1, 22);
-	// Index 2 (Right Hand) -> actual value 32
-	ui_->ikTarget->setItemData(2, 32);
 	
 	updateProgressBarColor(0);
 }
@@ -172,25 +142,16 @@ void MainWindow::posCtrlModeSend(){
 
 void MainWindow::jointSendModeSend(){
 	p73_msgs::msg::PosCmd pos_cmd;
-	pos_cmd.gravity = ui_->pc_grav->isChecked();
+	// pos_cmd.gravity = ui_->pc_grav->isChecked();
 	pos_cmd.traj_time = ui_->trajTime->value();
 
-	// TODO: this is available when the robot has neck motor 
-	// for(int i = 0; i < 32; i++) {
-	// 	pos_cmd.position[i] = joint_pos_cmd_spinboxes[i]->value();
-	// }
-	for (int i = 0; i < 22; i++) 
-		pos_cmd.position[i] = joint_pos_cmd_spinboxes[i]->value();
-	for (int i = 25; i < 32; i++) 
-		pos_cmd.position[i-3] = joint_pos_cmd_spinboxes[i]->value();
+	for (int i = 0; i < MainWindow::DOF_NUM; i++) {
+		if (joint_pos_cmd_spinboxes[i]) {
+			pos_cmd.position[i] = joint_pos_cmd_spinboxes[i]->value();
+		}
+	}
 
 	pos_cmd_pub_->publish(pos_cmd);
-}
-
-void MainWindow::gravCtrlModeSend(){
-	std_msgs::msg::UInt32 ctrl_mode;
-	ctrl_mode.data = 2;
-	ctrl_mode_pub_->publish(ctrl_mode);
 }
 
 void MainWindow::ctrlTimeCallback(const std_msgs::msg::Float32::SharedPtr msg) 
@@ -278,22 +239,26 @@ void MainWindow::jointStateCallback(const sensor_msgs::msg::JointState::SharedPt
 	// Helper lambda to update labels
 	auto updateLabels = [&msg](JointLabels& labels, int start_idx, int count) {
 		for(int i = 0; i < count; i++) {
-			labels.pos[i]->setText(QString::number(msg->position[start_idx + i], 'f', 3));
-			labels.vel[i]->setText(QString::number(msg->velocity[start_idx + i], 'f', 3));
-			labels.torq[i]->setText(QString::number(msg->effort[start_idx + i], 'f', 3));
+			const int idx = start_idx + i;
+			const double pos = idx < static_cast<int>(msg->position.size()) ? msg->position[idx] : 0.0;
+			const double vel = idx < static_cast<int>(msg->velocity.size()) ? msg->velocity[idx] : 0.0;
+			const double torq = idx < static_cast<int>(msg->effort.size()) ? msg->effort[idx] : 0.0;
+
+			labels.pos[i]->setText(QString::number(pos, 'f', 3));
+			labels.vel[i]->setText(QString::number(vel, 'f', 3));
+			labels.torq[i]->setText(QString::number(torq, 'f', 3));
 		}
 	};
 
 	// Update all joint groups
 	updateLabels(lleg_labels, 0, 6);    // Left leg: indices 0-5
 	updateLabels(rleg_labels, 6, 6);     // Right leg: indices 6-11
-	updateLabels(waist_labels, 12, 3);   // Waist: indices 12-14
-	updateLabels(larm_labels, 15, 7);    // Left arm: indices 15-21
-	updateLabels(rarm_labels, 22, 7);     // Right arm: indices 22-28
+	updateLabels(waist_labels, 12, 1);   // Waist: indices 12-12
 }
 
 void MainWindow::elmoStateCallback(const std_msgs::msg::Int8MultiArray::SharedPtr msg) {
-	for (int i = 0; i < 29; i++) {
+	const int count = std::min(static_cast<int>(elmo_state_labels.size()), static_cast<int>(msg->data.size()));
+	for (int i = 0; i < count; i++) {
 		int elmo_stat = msg->data[i];
 		// int elmo_ctrl_stat = msg->data[i+29];
 
@@ -315,8 +280,6 @@ void MainWindow::pelvStateCallback(const std_msgs::msg::Float64MultiArray::Share
 	for (int i = 0; i < 3; i++) {
 		pelv_state_labels[i]->setText(QString::number(msg->data[i], 'f', 3));
 		pelv_state_labels[i+3]->setText(QString::number(msg->data[i+3], 'f', 3));
-		pelv_state_labels[i+6]->setText(QString::number(msg->data[i+6], 'f', 3));
-		pelv_state_labels[i+9]->setText(QString::number(msg->data[i+9], 'f', 3));
 	}
 	int prg_val = (int)(100.0 * msg->data[12]);
 	ui_->progressBar->setValue(prg_val);
@@ -422,19 +385,9 @@ void MainWindow::setupSpinBoxes(int start_idx, int count, QLayout* form_layout)
 }
 
 void MainWindow::posModeSend(const float* position){
-	for(int i = 0; i < 32; i++) {
-		joint_pos_cmd_spinboxes[i]->setValue(position[i]);
+	for(int i = 0; i < MainWindow::DOF_NUM; i++) {
+		if (joint_pos_cmd_spinboxes[i]) {
+			joint_pos_cmd_spinboxes[i]->setValue(position[i]);
+		}
 	}
-}
-
-void MainWindow::gwIkTestmodeSend(){
-	p73_msgs::msg::IKTaskCmd ik_taskmode;
-	ik_taskmode.ik_mode = true;
-	
-	// Get the actual value (0, 22, or 29) instead of index (0, 1, 2)
-	ik_taskmode.target_link = ui_->ikTarget->currentData().toInt();
-	
-	ik_taskmode.target_pos = {ui_->ikX->value(), ui_->ikY->value(), ui_->ikZ->value()};
-	ik_taskmode.traj_time = ui_->ikTrajTime->value();
-	iktask_mode_pub_->publish(ik_taskmode);
 }

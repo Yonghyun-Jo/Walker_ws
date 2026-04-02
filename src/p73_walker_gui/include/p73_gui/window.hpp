@@ -7,7 +7,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <p73_msgs/msg/task_cmd.hpp>
 #include <p73_msgs/msg/pos_cmd.hpp>
-#include <p73_msgs/msg/ik_task_cmd.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32.hpp>
@@ -22,6 +21,8 @@ class MainWindow : public QMainWindow, public rclcpp::Node {
 	Q_OBJECT
 
 public:
+	static constexpr int DOF_NUM = 13;
+
 	explicit MainWindow(QWidget* parent=nullptr);
 	~MainWindow();
 
@@ -37,7 +38,7 @@ public:
 	std::vector<QLabel*> elmo_state_labels;
 	std::vector<QLabel*> elmo_ctrl_state_labels;
 	
-	JointLabels lleg_labels, rleg_labels, larm_labels, rarm_labels, waist_labels, neck_labels;
+	JointLabels lleg_labels, rleg_labels, waist_labels;
 	std::vector<QDoubleSpinBox*> joint_pos_cmd_spinboxes;
 
 private slots:
@@ -47,10 +48,6 @@ private slots:
 	void posCtrlModeSend();
 	void jointSendModeSend();
 	void posModeSend(const float* position);
-
-	void gwIkTestmodeSend();
-
-	void gravCtrlModeSend();
 
 private:
 	// Helper function to create and setup labels
@@ -79,8 +76,6 @@ private:
 	rclcpp::Publisher<p73_msgs::msg::PosCmd>::SharedPtr pos_cmd_pub_;
 	rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gui_cmd_pub_;
 
-	rclcpp::Publisher<p73_msgs::msg::IKTaskCmd>::SharedPtr iktask_mode_pub_;
-
 	// ROS 2 subscribers
 	rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr ctrl_time_sub_;
 	rclcpp::Subscription<std_msgs::msg::Int8MultiArray>::SharedPtr sys_state_sub_;
@@ -90,47 +85,16 @@ private:
 	rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr pelv_state_sub_;
 	rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr imu_state_sub_;
 
-	float zero_pos_[32] 	= {	0,	0,	0,	0,	0,	0,	
-								0,	0,	0,	0,	0,	0,	
-								0,	0,	0,	
-								0,	0,	0,	0,	0,	0,	0,	
-								0,	0,	0,	
-								0,	0,	0,	0,	0,	0,	0};	
+	float zero_pos_[DOF_NUM] = {
+		0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+		0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+		0.0
+	};
 
-	// float init_pos_[32]		= {	0,	0,	0,	0,	0,	0,
-								// 0,	0,	0,	0,	0,	0,
-	float init_pos_[32]		= {	0.0,	0.36,	0.0,	0.77,  -0.41,	0.0,
-								0.0,   -0.36,	0.0,   -0.77,	0.41,	0.0,
-								0.0,	0.0,	0.0,
-							    0.3,	0.0,	0.0,   -1.27,	0.0,	0.0,	0.0,
-								0.0, 	0.0,	0.0,
-							   -0.3,    0.0,	0.0,    1.27,	0.0,	0.0,    0.0};
-
-	// float left_hand_up_[32] = {	0,	0,	0,	0,	0,	0,
-								// 0,	0,	0,	0,	0,	0,	
-	float left_hand_up_[32] = {	0.0,   0.36,	0.0,	0.77,  -0.41,	0.0,
-								0.0,  -0.36,	0.0,   -0.77,	0.41,	0.0,
-								0.0,	0.0,	0.0,
-							   -1.0,  -1.57,	0.0,   -1.57,	0.0,	0.0,	0.0,
-								0.0, 	0.0,	0.0,
-							   -0.3,    0.0,	0.0,    1.27,	0.0,	0.0,    0.0};
-
-	// float right_hand_up_[32]= {	0,	0,	0,	0,	0,	0,
-								// 0,	0,	0,	0,	0,	0,	
-	float right_hand_up_[32]= {	0.0,	0.36,	0.0,	0.77,  -0.41,	0.0,
-								0.0,   -0.36,	0.0,   -0.77,	0.41,	0.0,
-								0.0,	0.0,	0.0,
-							    0.3,	0.0,	0.0,   -1.27,	0.0,	0.0,	0.0,
-								0.0, 	0.0,	0.0,
-							    1.0,   1.57,	0.0,    1.57,	0.0,	0.0,    0.0};
-
-	// float both_hands_up_[32]= {	0,	0,	0,	0,	0,	0,
-								// 0,	0,	0,	0,	0,	0,	
-	float both_hands_up_[32]= {	0.0,	0.36,	0.0,	0.77,  -0.41,	0.0,
-								0.0,   -0.36,	0.0,   -0.77,	0.41,	0.0,
-								0.0,	0.0,	0.0,
-							   -1.0,  -1.57,	0.0,   -1.57,	0.0,	0.0,	0.0,
-								0.0, 	0.0,	0.0,
-							    1.0,   1.57,	0.0,    1.57,	0.0,	0.0,    0.0};
+	float init_pos_[DOF_NUM] = {
+		0.0, +0.18, 0.0,  0.35, -0.17, 0.0,
+		0.0, -0.18, 0.0, -0.35,  0.17, 0.0,
+		0.0
+	};
 
 };

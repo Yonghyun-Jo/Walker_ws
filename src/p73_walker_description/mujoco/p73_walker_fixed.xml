@@ -61,7 +61,8 @@
     <light directional="true" diffuse=".5 .5 .5" pos="10 0 0" dir="-10 0 0"/>
 
     <body name="base_link">
-      <joint name="world_to_base" type="free" limited="false" actuatorfrclimited="false"  frictionloss="0" damping="0" stiffness="0" armature="0"/>
+      <!-- <joint name="world_to_base" type="free" limited="false" actuatorfrclimited="false"  frictionloss="0" damping="0" stiffness="0" armature="0"/> -->
+      <joint name="world_to_base" type="free" limited="false" actuatorfrclimited="false"  frictionloss="1e10" damping="0" stiffness="0" armature="0"/>
       <inertial pos="0.00118423 8.43237e-05 0.0218623" quat="0.520509 0.476955 0.480298 0.520479" mass="5.47506" diaginertia="0.0323962 0.0262879 0.0208649"/>
       <geom type="mesh" contype="0" conaffinity="0" density="0" mesh="base_link" material="blue" group="1"/>
       <geom class="cls" size="0.065 0.105" quat="0.707107 0 0.707107 0" pos="0.0 0.0 0.0" type="cylinder" />
@@ -180,7 +181,7 @@
 
 <keyframe>
   <key name="stand"
-       qpos="0 0 0.895 1 0 0 0
+       qpos="0 0 1.295 1 0 0 0
              0.0  0.18 0.0  0.35 -0.17 0.0
              0.0 -0.18 0.0 -0.35  0.17 0.0
              0.0"/>
