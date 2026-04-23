@@ -49,37 +49,54 @@ void CustomController::initVariable()
 {
     cout << "[p73_cc] Initializing variables" << endl;
 
-    q_default_p73_ <<  0.0,  0.18, 0.0,  0.35, -0.17, 0.0,
-                       0.0, -0.18, 0.0, -0.35,  0.17, 0.0,
+    q_default_p73_ << 0.0, 0.18, 0.0, 0.35, -0.17, 0.0,
+                       0.0, -0.18, 0.0, -0.35, 0.17, 0.0,
                        0.0;
 
-    q_default_isaac_ <<  0.0,  0.18, 0.0,  0.35, -0.17, 0.0,
-                         0.0, -0.18, 0.0, -0.35,  0.17, 0.0;
+    q_default_isaac_ << 0.0, 0.18, 0.0, 0.35, -0.17, 0.0,
+                         0.0, -0.18, 0.0, -0.35, 0.17, 0.0;
 
-    kp_p73_ << 1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,
-               1536.0, 937.5, 625.0, 747.552, 490.644, 490.104,
+    kp_p73_ << 1536.0, 937.5, 625.0, 570.08, 463.896, 463.788,
+               1536.0, 937.5, 625.0, 570.08, 463.896, 463.788,
                576.0;
 
-    kd_p73_ << 76.8, 37.5, 12.5, 37.378, 16.355, 5.337,
-               76.8, 37.5, 12.5, 37.378, 16.355, 5.337,
+    kd_p73_ << 76.8, 37.5, 12.5, 28.504, 16.0, 16.0,
+               76.8, 37.5, 12.5, 28.504, 16.0, 16.0,
                19.2;
 
     torque_bound_p73_ << 352.0, 220.0, 95.0, 220.0, 95.0, 95.0,
-                         352.0, 220.0, 95.0, 220.0, 95.0, 95.0,
-                         152.0;
+                          352.0, 220.0, 95.0, 220.0, 95.0, 95.0,
+                          152.0;
 
-    q_limit_lower_p73_ << -0.58, -1.57, -0.78,  0.0,  -1.05, -0.42,
-                          -0.58, -2.09, -0.78, -2.56, -0.7,  -0.42;
-    q_limit_upper_p73_ <<  0.3,   2.09,  0.78,  2.56,  0.7,   0.42,
-                           0.3,   1.57,  0.78,  0.0,   1.05,  0.42;
+    // PACE encoder bias — Best parameter set (from PACE system identification).
+    // Must match isaaclab_walker/assets/p73_walker.py  DelayedPDActuatorLUTCfg.encoder_bias
+    // exactly; otherwise the PD equilibrium here drifts away from what the policy
+    // was trained against.
+    // Order: L_HipRoll, L_HipPitch, L_HipYaw, L_Knee, L_AnklePitch, L_AnkleRoll,
+    //        R_HipRoll, R_HipPitch, R_HipYaw, R_Knee, R_AnklePitch, R_AnkleRoll, WaistYaw.
+    encoder_bias_ <<  0.0149, -0.1000, -0.1000, -0.1000, -0.1000, -0.1000,
+                      0.0295,  0.1000,  0.1000,  0.1000,  0.1000,  0.1000,
+                     -0.0021;
+
+    q_limit_lower_p73_ << -0.58, -1.57, -0.78, 0.0, -1.05, -0.42,
+                           -0.58, -2.09, -0.78, -2.56, -0.7, -0.42;
+    q_limit_upper_p73_ << 0.3, 2.09, 0.78, 2.56, 0.7, 0.42,
+                           0.3, 1.57, 0.78, 0.0, 1.05, 0.42;
 
     rl_action_.setZero();
     last_action_processed_.setZero();
     torque_rl_.setZero();
+    cached_anet_torque_.setZero();
+    anet_hist_initialized_ = false;
 
     policy_frame_.assign(num_single_obs, 0.0f);
     policy_obs_hist_term_major_.assign(policy_obs_dim_, 0.0f);
     policy_hist_initialized_ = false;
+
+    // Actuator Net: load weights if enabled (toggle in cc.h)
+    if (use_actuator_net_) {
+        loadActuatorNets();
+    }
 }
 
 // =====================================================================
@@ -178,8 +195,8 @@ void CustomController::loadOnnX()
 // =====================================================================
 // processNoise — TOCABI sim2real pattern
 //
-// Real robot:  direct sensor values + 4Hz LPF on velocity
-// Simulation:  tiny noise on position + numerical differentiation + 4Hz LPF
+// Real robot: direct sensor values + 4Hz LPF on velocity
+// Simulation: tiny noise on position + numerical differentiation + 4Hz LPF
 //
 // q_noise_ and q_vel_noise_ are used by BOTH obs AND PD (consistent)
 // =====================================================================
@@ -197,7 +214,8 @@ void CustomController::processNoise()
             double sampling_freq = 1.0 / dt;
             q_dot_lpf_ = DyrosMath::lpf<MODEL_DOF>(rd_.q_dot_, q_dot_lpf_, sampling_freq, lpf_cutoff_hz_);
         }
-        q_vel_noise_ = q_dot_lpf_;
+        // q_vel_noise_ = q_dot_lpf_;
+        q_vel_noise_ = rd_.q_dot_;
     }
     else
     {
@@ -253,7 +271,6 @@ void CustomController::processObservation()
         local_vel_yaw = target_vel_yaw_;
     }
 
-    //local_vel_x = 0.1;
 
     // Velocity command from ROS2 teleop (topic: p73/cmd_vel)
     // Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel
@@ -373,6 +390,7 @@ void CustomController::computeFast()
     if (init) {
         init = false;
         start_time_ = control_time_us;
+        q_init_ = rd_.q_;
         torque_init_ = rd_.torque_desired;
         time_inference_pre_ = control_time_us - policy_dt_ * 1e6;
         rl_action_.setZero();
@@ -380,6 +398,13 @@ void CustomController::computeFast()
         gait_step_counter_ = 0;
         policy_hist_initialized_ = false;
         std::fill(policy_obs_hist_term_major_.begin(), policy_obs_hist_term_major_.end(), 0.0f);
+        anet_hist_initialized_ = false;
+        cached_anet_torque_.setZero();
+        for (auto& h : anet_pos_err_hist_) h = {0.0, 0.0};
+        for (auto& h : anet_vel_hist_) h = {0.0, 0.0};
+
+        // q_desired delay buffer: force re-prime on first compute below
+        q_desired_delay_initialized_ = false;
 
         // Initialize processNoise state
         q_noise_ = rd_.q_;
@@ -404,6 +429,7 @@ void CustomController::computeFast()
     if ((control_time_us - time_inference_pre_) / 1.0e6 >= policy_dt_) {
         processObservation();
         feedforwardPolicy();
+
         time_inference_pre_ = control_time_us;
         policy_step_count++;
 
@@ -489,7 +515,7 @@ void CustomController::computeFast()
         }
     }
 
-    // Action → Target Position → PD every tick (matching TOCABI catkin_ws)
+    // Action → Target Position (used by both PD and actuator net for q_desired logging)
     VectorQd target_pos = q_default_p73_;
     for (int i = 0; i < num_action; i++) {
         double dq = rl_action_(i) * action_scale_;
@@ -497,35 +523,124 @@ void CustomController::computeFast()
         target_pos(i) = q_default_p73_(i) + dq;
         target_pos(i) = DyrosMath::minmax_cut(target_pos(i), q_limit_lower_p73_(i), q_limit_upper_p73_(i));
     }
-    for (int i = 0; i < MODEL_DOF; i++) {
-        torque_rl_(i) = kp_p73_(i) * (target_pos(i) - q_noise_(i))
-                      - kd_p73_(i) * q_vel_noise_(i);
-        torque_rl_(i) = DyrosMath::minmax_cut(torque_rl_(i),
-                        -torque_bound_p73_(i), torque_bound_p73_(i));
-    }
 
-    // // Spline transition for first 100ms
+    // --- Step 1: Raw q_desired (before delay) ---
+    //  • During ramp-in (first 100 ms): cubic spline from q_init_ to target_pos
+    //  • After ramp-in: direct target_pos
+    VectorQd q_des_raw;
     if (control_time_us < start_time_ + 0.1e6) {
-        for (int i = 0; i < MODEL_DOF; i++)
-            torque_spline_(i) = DyrosMath::cubic(control_time_us,
-                start_time_, start_time_ + 0.1e6,
-                torque_init_(i), torque_rl_(i), 0.0, 0.0);
-        rd_.torque_desired = torque_spline_;
-        if (is_on_robot_) {
-            rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, torque_spline_);
+        for (int i = 0; i < MODEL_DOF; i++) {
+            q_des_raw(i) = DyrosMath::cubic(control_time_us, start_time_, start_time_ + 0.1e6,
+                                            q_init_(i), target_pos(i), 0.0, 0.0);
         }
     } else {
-        rd_.torque_desired = torque_rl_;
-        if (is_on_robot_) {
-            rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, torque_rl_);
+        q_des_raw = target_pos;
+    }
+
+    // --- Step 2: q_desired delay buffer (matches Isaac DelayedPDActuator) ---
+    //   Isaac config: min_delay=0, max_delay=2 physics steps.
+    //   Isaac physics dt = 0.005 s → mean delay ≈ 1 step = 5 ms.
+    //   cc.cpp runs at 1 kHz, so 5 ticks ≈ 5 ms.
+    //   Ring buffer: read slot at head (oldest, from kQDesiredDelayTicks ticks ago),
+    //                then overwrite that slot with current value, advance head.
+    VectorQd q_des_delayed;
+    if (!q_desired_delay_initialized_) {
+        for (int k = 0; k < kQDesiredDelayTicks; k++) q_desired_delay_buffer_[k] = q_des_raw;
+        q_desired_delay_head_ = 0;
+        q_desired_delay_initialized_ = true;
+        q_des_delayed = q_des_raw;
+    } else {
+        q_des_delayed = q_desired_delay_buffer_[q_desired_delay_head_];
+        q_desired_delay_buffer_[q_desired_delay_head_] = q_des_raw;
+        q_desired_delay_head_ = (q_desired_delay_head_ + 1) % kQDesiredDelayTicks;
+    }
+
+    // rd_.q_desired is what the PD / actuator net sees (post-delay). This matches
+    // the Isaac training pipeline where the delay buffer sits *before* PD.
+    rd_.q_desired = q_des_delayed;
+
+    // --- Step 3: Torque ---
+    //   PD law with PACE encoder bias:
+    //      τ = Kp · (q_des - q + q_bias) - Kd · q_dot
+    //   The +q_bias term shifts the PD equilibrium to match the real-robot
+    //   calibration, exactly as DelayedPDActuatorLUT.compute does in IsaacLab.
+    if (control_time_us < start_time_ + 0.1e6) {
+        // Ramp-in: always PD (safety — identical to prior behavior)
+        for (int i = 0; i < MODEL_DOF; i++) {
+            torque_rl_(i) = kp_p73_(i) * (rd_.q_desired(i) - q_noise_(i) + encoder_bias_(i))
+                          - kd_p73_(i) * q_vel_noise_(i);
+        }
+    } else if (use_actuator_net_) {
+        // Actuator Net mode: forward pass every tick (1 kHz).
+        // Uses rd_.q_desired (already delayed) inside computeActuatorNetTorques.
+        computeActuatorNetTorques();
+        torque_rl_ = cached_anet_torque_;
+    } else {
+        // PD mode: recompute torque every tick at 1 kHz
+        for (int i = 0; i < MODEL_DOF; i++) {
+            torque_rl_(i) = kp_p73_(i) * (rd_.q_desired(i) - q_noise_(i) + encoder_bias_(i))
+                          - kd_p73_(i) * q_vel_noise_(i);
         }
     }
+
+    // torque_bound_p73_ is the MOTOR-side limit. The clamp must happen on the
+    // motor-space torque (τ_m = J^T τ_j), not on joint-space torque.
+    //
+    //   Real robot: rd_.four_bar_Jaco_ is populated by state_estimator; map
+    //               τ_j → τ_m, clamp τ_m, send as motor torque. state_estimator
+    //               also clamps τ_m at the ECAT boundary (double safety).
+    //
+    //   MuJoCo   : the sim model has no 4-bar (each <motor> acts directly on its
+    //               joint), and state_estimator does not populate four_bar_Jaco_
+    //               in simMode. We run the 4-bar kinematics locally here: compute
+    //               motor pos from current joint pos, evaluate J, then apply
+    //               τ_j' = J^{-T} · clamp(J^T τ_j, ±τ_m_bound). Feeding τ_j'
+    //               back to MuJoCo reproduces the real motor-limit envelope
+    //               (nonlinear, configuration-dependent) at the joint level.
+    if (is_on_robot_) {
+        VectorQd torque_motor = WBC::JointTorqueToMotorTorque(rd_, torque_rl_);
+        for (int i = 0; i < MODEL_DOF; i++) {
+            torque_motor(i) = DyrosMath::minmax_cut(torque_motor(i), -torque_bound_p73_(i), torque_bound_p73_(i));
+        }
+        rd_.torque_desired = torque_motor;
+    } else {
+        // Evaluate J at the current joint configuration.
+        VectorQd q_motor_curr;
+        sim_four_bar_.Joint2MotorDesiredPos(q_noise_, q_motor_curr);
+        VectorQd joint_pos_dummy, joint_vel_dummy;
+        VectorQd motor_vel_zero = VectorQd::Zero();
+        sim_four_bar_.Motor2JointPosVel(q_motor_curr, joint_pos_dummy, motor_vel_zero, joint_vel_dummy);
+        MatrixQQd J = sim_four_bar_.getFourBarJaco();
+
+        VectorQd torque_motor = J.transpose() * torque_rl_;
+        for (int i = 0; i < MODEL_DOF; i++) {
+            torque_motor(i) = DyrosMath::minmax_cut(torque_motor(i), -torque_bound_p73_(i), torque_bound_p73_(i));
+        }
+        // τ_j' = J^{-T} τ_m_clamped — joint-space torque that realizes the
+        // clamped motor torque through the 4-bar.
+        rd_.torque_desired = J.transpose().inverse() * torque_motor;
+    }
+
+    // // // Spline transition for first 100ms
+    // if (control_time_us < start_time_ + 0.1e6) {
+    //     for (int i = 0; i < MODEL_DOF; i++)
+    //         torque_spline_(i) = DyrosMath::cubic(control_time_us, start_time_, start_time_ + 0.1e6, torque_init_(i), torque_rl_(i), 0.0, 0.0);
+    //     rd_.torque_desired = torque_spline_;
+    //     if (is_on_robot_) {
+    //         rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, torque_spline_);
+    //     }
+    // } else {
+    //     rd_.torque_desired = torque_rl_;
+    //     if (is_on_robot_) {
+    //         rd_.torque_desired = WBC::JointTorqueToMotorTorque(rd_, torque_rl_);
+    //     }
+    // }
 
     // ====== Data logging (every tick, ~1kHz) ======
     static std::ofstream log_file;
     static bool log_opened = false;
     if (!log_opened) {
-        
+
         std::string log_dir = std::string(getenv("HOME")) + "/ros2_ws/src/p73_cc/logs";
         if(is_on_robot_){
             log_dir = "/home/bluerobin/ros2_ws/src/p73_cc/logs";
@@ -650,6 +765,172 @@ void CustomController::computeFast()
 }
 
 // =====================================================================
+// loadActuatorNets — load binary weight file for 12 lower body joints
+//
+// Binary format: 12 joints x (W0(32,6) b0(32) W1(32,32) b1(32) W2(32,32) b2(32) W3(1,32) b3(1))
+// All float32, row-major.  Joint order = IsaacLab _LOWER_JOINT_NAMES = cc.cpp joint order.
+// =====================================================================
+void CustomController::loadActuatorNets()
+{
+    std::string anet_path;
+    if (is_on_robot_) {
+        anet_path = "/home/bluerobin/ros2_ws/src/p73_cc/actuator_nets/actuator_nets.bin";
+    } else {
+        anet_path = std::string(getenv("HOME")) + "/ros2_ws/src/p73_cc/actuator_nets/actuator_nets.bin";
+    }
+
+    cout << "[p73_cc] Loading actuator nets from " << anet_path << endl;
+
+    std::ifstream file(anet_path, std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("[p73_cc] Failed to open actuator net weights: " + anet_path);
+    }
+
+    auto read_matrix = [&](auto& mat) {
+        constexpr int rows = std::remove_reference_t<decltype(mat)>::RowsAtCompileTime;
+        constexpr int cols = std::remove_reference_t<decltype(mat)>::ColsAtCompileTime;
+        float buf[rows * cols];
+        file.read(reinterpret_cast<char*>(buf), sizeof(buf));
+        // PyTorch stores row-major: buf[r*cols + c] = mat(r, c)
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                mat(r, c) = static_cast<double>(buf[r * cols + c]);
+    };
+
+    auto read_vector = [&](auto& vec) {
+        constexpr int size = std::remove_reference_t<decltype(vec)>::RowsAtCompileTime;
+        float buf[size];
+        file.read(reinterpret_cast<char*>(buf), sizeof(buf));
+        for (int i = 0; i < size; i++)
+            vec(i) = static_cast<double>(buf[i]);
+    };
+
+    const char* joint_labels[] = {
+        "L_HipRoll", "L_HipPitch", "L_HipYaw", "L_Knee", "L_AnklePitch", "L_AnkleRoll",
+        "R_HipRoll", "R_HipPitch", "R_HipYaw", "R_Knee", "R_AnklePitch", "R_AnkleRoll"
+    };
+
+    for (int j = 0; j < 12; j++) {
+        auto& w = anet_weights_[j];
+        read_matrix(w.W0);  // (32, 6)
+        read_vector(w.b0);  // (32)
+        read_matrix(w.W1);  // (32, 32)
+        read_vector(w.b1);  // (32)
+        read_matrix(w.W2);  // (32, 32)
+        read_vector(w.b2);  // (32)
+        read_matrix(w.W3);  // (1, 32)
+        float b3_buf;
+        file.read(reinterpret_cast<char*>(&b3_buf), sizeof(float));
+        w.b3 = static_cast<double>(b3_buf);
+
+        cout << "[p73_cc]   Joint " << j << " (" << joint_labels[j] << ") loaded" << endl;
+    }
+
+    if (file.fail()) {
+        throw std::runtime_error("[p73_cc] Error reading actuator net weights (file truncated?)");
+    }
+
+    cout << "[p73_cc] Actuator nets loaded: 12 joints, 50Hz torque hold" << endl;
+}
+
+// =====================================================================
+// anetForward — single-joint actuator net forward pass
+//
+// Architecture: Linear(6,32)->Softsign->Linear(32,32)->Softsign->Linear(32,32)->Softsign->Linear(32,1)
+// =====================================================================
+double CustomController::anetForward(int j, const Eigen::Matrix<double, 6, 1>& input)
+{
+    const auto& w = anet_weights_[j];
+
+    // Layer 0: Linear(6, 32) + Softsign
+    Eigen::Matrix<double, 32, 1> h = w.W0 * input + w.b0;
+    h = h.array() / (1.0 + h.array().abs());
+
+    // Layer 1: Linear(32, 32) + Softsign
+    h = w.W1 * h + w.b1;
+    h = h.array() / (1.0 + h.array().abs());
+
+    // Layer 2: Linear(32, 32) + Softsign
+    h = w.W2 * h + w.b2;
+    h = h.array() / (1.0 + h.array().abs());
+
+    // Layer 3: Linear(32, 1), no activation
+    return (w.W3 * h)(0) + w.b3;
+}
+
+// =====================================================================
+// computeActuatorNetTorques — called every tick (1kHz)
+//
+// Forward pass at 1kHz: uses CURRENT pos_err/vel + STORED history (10ms, 20ms ago).
+// History buffer update at 100Hz (every 10ms): shift and store current snapshot.
+// This matches training: 1kHz data collection, 0.01s history sample interval.
+//
+// History layout:
+//   anet_pos_err_hist_[joint][0] = snapshot from ~10ms ago
+//   anet_pos_err_hist_[joint][1] = snapshot from ~20ms ago
+//   (same for anet_vel_hist_)
+//
+// Forward pass input (every tick):
+//   [pos_err_now, hist[0], hist[1], vel_now, vel_hist[0], vel_hist[1]]
+//
+// WaistYaw (joint 12) remains PD-controlled.
+// =====================================================================
+void CustomController::computeActuatorNetTorques()
+{
+    float control_time_us = rd_.control_time_us_;
+
+    // --- 1. History buffer update at 100Hz (every 10ms) ---
+    static float anet_hist_time_pre = -1.0f;
+    if (anet_hist_time_pre < 0.0f) {
+        anet_hist_time_pre = control_time_us - anet_dt_ * 1e6;
+    }
+
+    bool do_hist_update = (control_time_us - anet_hist_time_pre) / 1.0e6 >= anet_dt_;
+    if (do_hist_update) {
+        for (int i = 0; i < 12; i++) {
+            double pos_err = rd_.q_desired(i) - q_noise_(i);
+            double vel = q_vel_noise_(i);
+
+            if (!anet_hist_initialized_) {
+                // First call: fill both history slots with current value
+                anet_pos_err_hist_[i] = {pos_err, pos_err};
+                anet_vel_hist_[i] = {vel, vel};
+            } else {
+                // Shift: [0](10ms ago) → [1](20ms ago), current → [0](10ms ago)
+                anet_pos_err_hist_[i][1] = anet_pos_err_hist_[i][0];
+                anet_pos_err_hist_[i][0] = pos_err;
+                anet_vel_hist_[i][1] = anet_vel_hist_[i][0];
+                anet_vel_hist_[i][0] = vel;
+            }
+        }
+        anet_hist_initialized_ = true;
+        anet_hist_time_pre = control_time_us;
+    }
+
+    // --- 2. Forward pass every tick (1kHz) ---
+    for (int i = 0; i < 12; i++) {
+        double pos_err_now = rd_.q_desired(i) - q_noise_(i);
+        double vel_now = q_vel_noise_(i);
+
+        Eigen::Matrix<double, 6, 1> anet_input;
+        anet_input << pos_err_now,              // current (1kHz fresh)
+                      anet_pos_err_hist_[i][0], // ~10ms ago
+                      anet_pos_err_hist_[i][1], // ~20ms ago
+                      vel_now,                  // current (1kHz fresh)
+                      anet_vel_hist_[i][0],     // ~10ms ago
+                      anet_vel_hist_[i][1];     // ~20ms ago
+
+        double torque = anetForward(i, anet_input) * anet_output_scale_;
+        cached_anet_torque_(i) = torque;
+    }
+
+    // --- 3. WaistYaw (joint 12): PD control with PACE encoder bias ---
+    // Clamping is performed in motor space at the top of computeFast().
+    cached_anet_torque_(12) = kp_p73_(12) * (q_default_p73_(12) - q_noise_(12) + encoder_bias_(12))
+                            - kd_p73_(12) * q_vel_noise_(12);
+}
+
+// =====================================================================
 void CustomController::computeSlow() {}
 
 void CustomController::copyRobotData(RobotEigenData &rd_l)
@@ -675,30 +956,36 @@ Vector3d CustomController::quatRotateInverse(const Quaterniond &q, const Vector3
 void CustomController::velCmdCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
 {
     std::lock_guard<std::mutex> lock(vel_mutex_);
-    target_vel_x_   = msg->linear.x;
-    target_vel_y_   = msg->linear.y;
+    target_vel_x_ = msg->linear.x;
+    target_vel_y_ = msg->linear.y;
     target_vel_yaw_ = msg->angular.z;
 }
 
 void CustomController::startVelSubscriber()
 {
-    vel_node_ = rclcpp::Node::make_shared("p73_vel_cmd_listener");
-    // vel_sub_ = vel_node_->create_subscription<geometry_msgs::msg::Twist>(
-    //     "p73/cmd_vel", 10,
-    //     std::bind(&CustomController::velCmdCallback, this, std::placeholders::_1));
-    vel_sub_ = vel_node_->create_subscription<geometry_msgs::msg::Twist>(
+    // Use the main controller node (dc_.node_) instead of creating a separate node.
+    // This shares the same DDS participant as GUI/task command subscriptions,
+    // which avoids communication issues when running with sudo on real robot.
+    vel_cbg_ = dc_.node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    rclcpp::SubscriptionOptions opts;
+    opts.callback_group = vel_cbg_;
+
+    vel_sub_ = dc_.node_->create_subscription<geometry_msgs::msg::Twist>(
         "/p73/cmd_vel", 10,
-        std::bind(&CustomController::velCmdCallback, this, std::placeholders::_1));
+        std::bind(&CustomController::velCmdCallback, this, std::placeholders::_1),
+        opts);
+
+    vel_executor_.add_callback_group(vel_cbg_, dc_.node_->get_node_base_interface());
 
     vel_spin_running_ = true;
     vel_spin_thread_ = std::thread([this]() {
         while (vel_spin_running_ && rclcpp::ok()) {
-            rclcpp::spin_some(vel_node_);
+            vel_executor_.spin_some(std::chrono::milliseconds(5));
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     });
-    cout << "[p73_cc] Velocity command subscriber started on topic: p73/cmd_vel" << endl;
-    cout << "[p73_cc] Usage: ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=p73/cmd_vel" << endl;
+    cout << "[p73_cc] Velocity command subscriber started on topic: /p73/cmd_vel" << endl;
+    cout << "[p73_cc] Usage: python3 ~/Walker_ws/src/p73_cc/scripts/walker_teleop.py" << endl;
 }
 
 void CustomController::stopVelSubscriber()
@@ -706,5 +993,4 @@ void CustomController::stopVelSubscriber()
     vel_spin_running_ = false;
     if (vel_spin_thread_.joinable()) vel_spin_thread_.join();
     vel_sub_.reset();
-    vel_node_.reset();
 }

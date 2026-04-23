@@ -2,6 +2,7 @@
 #define p73_cc_H
 
 #include "p73_lib/robot_data.h"
+#include "p73_lib/4bar_jac_func.h"
 #include "wholebody_functions.h"
 #include "onnxruntime_cxx_api.h"
 #include <rclcpp/rclcpp.hpp>
@@ -107,7 +108,7 @@ public:
     double noise_time_pre_ = 0.0;
     bool noise_initialized_ = false;
 
-    static constexpr double lpf_cutoff_hz_ = 4.0;  // TOCABI uses 4Hz LPF for q_dot
+    static constexpr double lpf_cutoff_hz_ = 20.0;  // TOCABI uses 4Hz LPF for q_dot
 
     //////////////////////// Robot State ////////////////////////
     // Default joint positions in P73 order (from p73_walker.py)
@@ -128,8 +129,29 @@ public:
     VectorQd torque_bound_p73_;
     VectorQd torque_rl_;
     VectorQd torque_init_;
+    VectorQd q_init_;
     VectorQd q_init_hold_;  // DEBUG: captured pose at mode entry
+    VectorQd q_spline_;
     VectorQd torque_spline_;
+
+    // PACE encoder bias (rad), applied in PD error:
+    //     τ = Kp * (q_des - q + q_bias) - Kd * q_dot
+    // Values are system-ID results from p73_walker.py (branch: custom_regulate_actionrate).
+    // Order: Isaac/MuJoCo/SHM order — Roll, Pitch, Yaw, Knee, AnklePitch, AnkleRoll, +WaistYaw.
+    VectorQd encoder_bias_;
+
+    // q_desired delay buffer (matches Isaac DelayedPDActuator).
+    // Isaac uses uniform delay in [min_delay=0, max_delay=2] physics steps, mean=1 step.
+    // Isaac physics dt = 0.005 s → mean delay = 5 ms.
+    // cc.cpp runs at 1 kHz → 5 ticks.
+    static constexpr int kQDesiredDelayTicks = 5;
+    std::array<VectorQd, kQDesiredDelayTicks> q_desired_delay_buffer_;
+    int q_desired_delay_head_ = 0;
+    bool q_desired_delay_initialized_ = false;
+
+    // 4-bar kinematics used in sim to reproduce motor-level torque clamping
+    // through J^T (state_estimator does not populate rd_.four_bar_Jaco_ in simMode).
+    FourBarKinematics sim_four_bar_;
 
     double action_scale_ = 0.5;  // from ActionsCfg scale
 
@@ -143,7 +165,7 @@ public:
 
     // Gait phase counter (50Hz step counter)
     int gait_step_counter_ = 0;
-    int gait_period_steps_ = 50;  // from rough_env_cfg __post_init__
+    int gait_period_steps_ = 70;  // from rough_env_cfg __post_init__
 
     // Velocity command (updated by ROS2 subscriber)
     std::mutex vel_mutex_;
@@ -156,8 +178,46 @@ public:
 
     string weight_dir_;
 
+    //////////////////////// Actuator Net ////////////////////////
+    // Per-joint neural network replacing PD control for lower body (12 joints).
+    // Network: Linear(6,32)->Softsign->Linear(32,32)->Softsign->Linear(32,32)->Softsign->Linear(32,1)
+    // Input: [pos_err_t, pos_err_{t-1}, pos_err_{t-2}, vel_t, vel_{t-1}, vel_{t-2}]
+    // Output: motor current (A) -> x100 -> torque (Nm)
+    // Computes at 50Hz (policy rate), cached for 1kHz main loop.
+    bool use_actuator_net_ = false;
+
+    struct ANetWeights {
+        Eigen::Matrix<double, 32, 6>  W0;
+        Eigen::Matrix<double, 32, 1>  b0;
+        Eigen::Matrix<double, 32, 32> W1;
+        Eigen::Matrix<double, 32, 1>  b1;
+        Eigen::Matrix<double, 32, 32> W2;
+        Eigen::Matrix<double, 32, 1>  b2;
+        Eigen::Matrix<double, 1, 32>  W3;
+        double b3;
+    };
+    std::array<ANetWeights, 12> anet_weights_;
+
+    // History buffers: [joint_idx][slot], slot: 0=~10ms ago, 1=~20ms ago
+    // Updated at 100Hz (anet_dt_). Current values are computed fresh every tick.
+    std::array<std::array<double, 2>, 12> anet_pos_err_hist_{};
+    std::array<std::array<double, 2>, 12> anet_vel_hist_{};
+    bool anet_hist_initialized_ = false;
+
+    VectorQd cached_anet_torque_;
+
+    static constexpr double anet_output_scale_ = 100.0;  // motor current (A) -> torque (Nm)
+    static constexpr double anet_dt_ = 0.01;              // history update interval (10ms, 100Hz)
+
+    void loadActuatorNets();
+    void computeActuatorNetTorques();
+    double anetForward(int joint_idx, const Eigen::Matrix<double, 6, 1>& input);
+
     //////////////////////// ROS2 Velocity Command Subscriber ////////////////////////
-    rclcpp::Node::SharedPtr vel_node_;
+    // Uses dc_.node_ (main controller node) to share its DDS participant,
+    // avoiding communication issues when running with sudo on real robot.
+    rclcpp::CallbackGroup::SharedPtr vel_cbg_;
+    rclcpp::executors::SingleThreadedExecutor vel_executor_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr vel_sub_;
     std::thread vel_spin_thread_;
     std::atomic<bool> vel_spin_running_{false};
