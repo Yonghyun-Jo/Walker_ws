@@ -3,7 +3,6 @@
 
 #include "p73_lib/robot_data.h"
 #include "p73_lib/4bar_jac_func.h"
-#include "qp.h"
 
 using namespace P73;
 
@@ -29,6 +28,10 @@ namespace WBC
     //--- Mapping
     VectorQd JointTorqueToMotorTorque(RobotEigenData& rd_, const Eigen::VectorQd& torque_joint);
     VectorQd JointPositionToMotorTorque(RobotEigenData& rd_);
+
+    //--- Utility
+    void loadActuatorNetModels();
+    Vector12d inferActuatorTorqueFromNet(RobotEigenData& rd_, double elapsed_time);
 
     void CheckTorqueLimit(RobotEigenData &rd_, VectorQd command_torque);
 }

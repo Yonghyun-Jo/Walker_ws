@@ -61,7 +61,8 @@ StateEstimator::StateEstimator(DataContainer &dc)
         }
     }
 
-
+    pinocchio::urdf::buildModel(urdf_path, rd_global_.model_clik_);
+    rd_global_.data_clik_ = pinocchio::Data(rd_global_.model_clik_);
 
 
 
@@ -200,12 +201,18 @@ StateEstimator::StateEstimator(DataContainer &dc)
         std::cout << std::fixed << std::setprecision(3) << param << " ";
     std::cout << std::endl;
 
-    //--- Joint PD Gain (loaded directly from yaml — single source of truth
-    //    shared with cc.cpp RL mode. wn is kept for documentation only.)
+    //--- Joint PD Gain
     dc_.node_->declare_parameter<std::vector<double>>("Kp_j", std::vector<double>(MODEL_DOF, 0.0));
     dc_.node_->declare_parameter<std::vector<double>>("Kd_j", std::vector<double>(MODEL_DOF, 0.0));
     dc_.node_->get_parameter("Kp_j", rd_global_.Kp_j);
     dc_.node_->get_parameter("Kd_j", rd_global_.Kd_j);
+    // rd_global_.Kp_j.resize(rd_global_.Kp_m.size());
+    // rd_global_.Kd_j.resize(rd_global_.Kd_m.size());
+
+    // for(int i = 0; i < MODEL_DOF; i++){
+    //     rd_global_.Kp_j[i] =     joint_armature[i] * wnwn[i];
+    //     rd_global_.Kd_j[i] = 2 * joint_armature[i] * wn[i];
+    // }
 
     std::cout << "Kp_j: " << " (size=" << rd_global_.Kp_j.size() << "): ";
     for (const auto &param : rd_global_.Kp_j)
@@ -257,12 +264,9 @@ StateEstimator::StateEstimator(DataContainer &dc)
         std::cout << std::fixed << std::setprecision(3) << param << " ";
     std::cout << std::endl;
 
-    //--- Torque limit (also exposed via rd_.torque_limit for cc.cpp RL clamp)
+    //--- Torque limit
     dc_.node_->declare_parameter<std::vector<double>>("torque_limit", std::vector<double>(MODEL_DOF, 0.0));
     dc_.node_->get_parameter("torque_limit", torque_limit);
-    for (int i = 0; i < MODEL_DOF; ++i) {
-        rd_global_.torque_limit(i) = torque_limit[i];
-    }
     std::cout << "torque limit: " << " (size=" << torque_limit.size() << "): ";
     for (const auto &param : torque_limit)
         std::cout << std::fixed << std::setprecision(3) << param << " ";

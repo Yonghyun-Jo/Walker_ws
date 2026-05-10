@@ -657,7 +657,7 @@ int main(int argc, char** argv) {
     mjv_defaultOption(&opt);
     mjvPerturb pert;
     mjv_defaultPerturb(&pert);
-  
+
     // simulate object encapsulates the UI
     auto sim = std::make_unique<mj::Simulate>(
         std::make_unique<mj::GlfwAdapter>(),
@@ -719,7 +719,7 @@ int main(int argc, char** argv) {
 
     // start physics thread
     std::thread physicsthreadhandle(&PhysicsThread, sim.get(), model_file_cstr);
-  
+
     // start simulation UI loop (blocking call)
     sim->RenderLoop();
     physicsthreadhandle.join();

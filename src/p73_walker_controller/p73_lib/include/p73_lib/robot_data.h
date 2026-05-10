@@ -13,7 +13,6 @@
 #include "br_driver.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "p73_msgs/msg/task_cmd.hpp"
-#include "p73_lib/link.h"
 #include "math_type_define.h"
 #include <limits>
 
@@ -28,6 +27,8 @@ struct RobotEigenData
 
     pinocchio::Model model_;
     pinocchio::Data data_;
+    pinocchio::Model model_clik_;
+    pinocchio::Data data_clik_;
     LinkData link_[LINK_NUMBER + 1];
     LinkData link_local_[LINK_NUMBER + 1];
     EndEffector ee_[ENDEFFECTOR_NUMBER];
@@ -96,6 +97,7 @@ struct RobotEigenData
     VectorQd q_desired, q_dot_desired, torque_desired;
     VectorQd q_motor_desired, torque_motor_desired;
     MatrixQQd four_bar_Jaco_, four_bar_Jaco_inv_;
+    Vector12d torque_actuatornet_;
 };
 
 struct DataContainer
@@ -109,7 +111,7 @@ struct DataContainer
     std::atomic<bool> triggerThread1;
     double command_[MODEL_DOF]; // it can be torque command or position command
 
-    bool simMode = true;
+    bool simMode = false;
     bool useMjcVirtual = false; // using mujoco data for state estimation
 
     rclcpp::Node::SharedPtr node_;

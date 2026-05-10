@@ -32,7 +32,6 @@ int main(int argc, char **argv)
     cpu_set_t cpusets[thread_number];
 
     dc_.simMode = node->get_parameter("sim_mode").as_bool();
-    dc_.useMjcVirtual = dc_.simMode;
     if (dc_.simMode)
         cout << cgreen << "Simulation Mode is enabled" << creset << endl;
     else

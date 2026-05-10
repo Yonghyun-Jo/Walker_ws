@@ -245,12 +245,12 @@
     </geometry>
     <material name="silver"/>
   </visual>
-  <collision>
+  <!-- <collision>
     <origin xyz="-0.000889 -0.0985 0.816317" rpy="0 0 0"/>
     <geometry>
       <mesh filename="../meshes/L_AnkleRoll_Link.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-  </collision>
+  </collision> -->
 </link>
 
 <link name="R_AnkleRoll_Link">
@@ -266,12 +266,12 @@
     </geometry>
     <material name="silver"/>
   </visual>
-  <collision>
+  <!-- <collision>
     <origin xyz="-0.000889 0.0985 0.816317" rpy="0 0 0"/>
     <geometry>
       <mesh filename="../meshes/R_AnkleRoll_Link.stl" scale="0.001 0.001 0.001"/>
     </geometry>
-  </collision>
+  </collision> -->
 </link>
 
 <link name="L_Foot_Link">

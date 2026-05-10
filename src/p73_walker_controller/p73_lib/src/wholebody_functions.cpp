@@ -1,6 +1,15 @@
 #include "wholebody_functions.h"
+#include <onnxruntime/onnxruntime_cxx_api.h>
+#include <vector>
 
 using namespace P73;
+
+namespace {
+    Ort::Env g_ort_env{ORT_LOGGING_LEVEL_WARNING, "actuatornet"};
+    Ort::SessionOptions g_session_options;
+    std::vector<Ort::Session> g_sessions;
+    bool g_models_ready = false;
+}
 
 namespace WBC
 {
@@ -90,70 +99,7 @@ namespace WBC
 
     VectorQd ContactForceFrictionConeConstraintTorque(RobotEigenData &rd_, Eigen::VectorQd command_torque)
     {
-        //--- Cost
-        Eigen::MatrixQQd H;
-        Eigen::VectorQd g;
 
-        H.setIdentity();
-        g.setZero();
-        g = (-1.0) * command_torque;
-
-        //--- Constraints
-        Eigen::MatrixXd A;
-        Eigen::VectorXd lbA, ubA;
-
-        unsigned int friction_cone_constraint_size = 17;
-        unsigned int total_variable_size = MODEL_DOF;
-        unsigned int total_constraint_size =  rd_.contact_index * friction_cone_constraint_size;
-        unsigned int contact_dof = rd_.contact_index * 6;
-
-        A.setZero(total_constraint_size, total_variable_size);
-        lbA.setZero(total_constraint_size);
-        ubA.setZero(total_constraint_size);
-
-        Eigen::MatrixXd total_force_const_matrix;
-        total_force_const_matrix.setZero(total_constraint_size, contact_dof);
-
-        for (int i = 0; i < rd_.contact_index; i++)
-        {
-            total_force_const_matrix.block(i * friction_cone_constraint_size, i * 6, friction_cone_constraint_size, 6) = rd_.ee_[rd_.ee_idx[i]].GetFrictionConeConstrainMatrix();
-        }
-
-        A   = total_force_const_matrix * rd_.J_C_INV_T.rightCols(total_variable_size);
-        lbA = total_force_const_matrix * rd_.P_C;
-        ubA.segment(0, total_constraint_size).setConstant(OsqpEigen::INFTY);
-
-        //--- Quadratic Programming
-        static CQuadraticProgram qp_torque_contact_;
-        static bool firstCalcQp = false;
-        if(!firstCalcQp)
-        {
-            qp_torque_contact_.InitializeProblemSize(total_variable_size, total_constraint_size);
-            qp_torque_contact_.setWarmStartOption();
-        
-            // qp_torque_contact_.PrintHessGrad();
-            // qp_torque_contact_.PrintSubjectToAx();
-            // qp_torque_contact_.PrintSubjectTox();
-
-            firstCalcQp = true;
-        }
-
-        qp_torque_contact_.UpdateMinProblem(H, g);
-        qp_torque_contact_.UpdateSubjectToAx(A, lbA, ubA);
-
-        Eigen::VectorXd torque_qp;
-        Eigen::VectorQd torque_safety;
-
-        if (qp_torque_contact_.solveQP(1000, torque_qp))
-        {
-            torque_safety = torque_qp.segment(0, MODEL_DOF);
-            return torque_safety;
-        }
-        else
-        {
-            std::cout << "===========QP SOLVE FAILED===========" << std::endl;
-            return command_torque;
-        }
     }
 
     void NullspaceInverseKinematics(RobotEigenData& rd_)
@@ -200,4 +146,85 @@ namespace WBC
 
         return torque_motor;
     }
+
+    void loadActuatorNetModels()
+    {
+        if (g_models_ready) return;
+        try {
+            std::string p = "/home/bluerobin/ros2_ws/src/p73_walker_controller/p73_lib/src/actuatornet_models/";
+            std::vector<std::string> model_names = {
+                "p73_lstm_left_hip_roll",   "p73_lstm_left_hip_pitch",  "p73_lstm_left_hip_yaw",
+                "p73_lstm_left_knee_pitch", "p73_lstm_left_ankle_pitch","p73_lstm_left_ankle_roll",
+                "p73_lstm_right_hip_roll",  "p73_lstm_right_hip_pitch", "p73_lstm_right_hip_yaw",
+                "p73_lstm_right_knee_pitch","p73_lstm_right_ankle_pitch","p73_lstm_right_ankle_roll"
+            };
+            g_session_options.SetIntraOpNumThreads(1);
+            g_session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+            for (auto& name : model_names) {
+                g_sessions.emplace_back(g_ort_env, (p + name + ".onnx").c_str(), g_session_options);
+            }
+            g_models_ready = true;
+            std::cout << "All ActuatorNet Models Loaded Successfully!" << std::endl;
+        } catch (const Ort::Exception& e) {
+            std::cerr << "Error loading ActuatorNet models: " << e.what() << std::endl;
+        }
+    }
+
+    Vector12d inferActuatorTorqueFromNet(RobotEigenData& rd_, double elapsed_time)
+    {
+        if (!g_models_ready)
+        {
+            std::cerr << "ActuatorNet: models not loaded. Call loadActuatorNetModels() before inference." << std::endl;
+            return Eigen::Vector12d::Zero();
+        }
+
+        // LSTM was trained with h=0, c=0 reset for every independent sample
+        // (shuffled DataLoader, seq_len=1, state=None each forward pass).
+        // Carrying state between steps would be distribution shift → reset each call.
+        const int HIDDEN_SIZE = 32;
+        const int NUM_LAYERS  = 3;
+        const int HC_SIZE     = NUM_LAYERS * HIDDEN_SIZE; // 96 floats per joint
+
+        std::array<float, HC_SIZE> h_zero; h_zero.fill(0.0f);
+        std::array<float, HC_SIZE> c_zero; c_zero.fill(0.0f);
+
+        Eigen::Vector12d inferred_torque = Eigen::Vector12d::Zero();
+
+        Ort::MemoryInfo mem_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        std::array<int64_t, 3> input_shape{1, 1, 2};
+        std::array<int64_t, 3> hc_shape{NUM_LAYERS, 1, HIDDEN_SIZE};
+
+        const char* input_names[]  = {"input", "h_in", "c_in"};
+        const char* output_names[] = {"output", "h_out", "c_out"};
+
+        for (int i = 0; i < 12; ++i) {
+            std::array<float, 2> input_data = {
+                (float)(rd_.q_desired(i) - rd_.q_(i)),
+                (float)rd_.q_dot_(i)
+            };
+
+            std::vector<Ort::Value> input_tensors;
+            input_tensors.reserve(3);
+            input_tensors.push_back(Ort::Value::CreateTensor<float>(
+                mem_info, input_data.data(), 2, input_shape.data(), 3));
+            input_tensors.push_back(Ort::Value::CreateTensor<float>(
+                mem_info, h_zero.data(), HC_SIZE, hc_shape.data(), 3));
+            input_tensors.push_back(Ort::Value::CreateTensor<float>(
+                mem_info, c_zero.data(), HC_SIZE, hc_shape.data(), 3));
+
+            try {
+                auto output_tensors = g_sessions[i].Run(
+                    Ort::RunOptions{nullptr}, input_names, input_tensors.data(), 3, output_names, 3);
+
+                float* out_data = output_tensors[0].GetTensorMutableData<float>();
+                inferred_torque(i) = out_data[0] / 0.01f;
+            } catch (const Ort::Exception& e) {
+                std::cerr << "ActuatorNet LSTM inference error joint " << i << ": " << e.what() << std::endl;
+            }
+        }
+        rd_.torque_actuatornet_ = inferred_torque;
+
+        return rd_.torque_actuatornet_;
+    }
+
 }
