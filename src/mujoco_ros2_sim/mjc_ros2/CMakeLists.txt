@@ -66,8 +66,30 @@ ament_target_dependencies(mujoco_ros2
   sensor_msgs
 )
 
+# Headless executable (no GLFW, no GUI — for automated evaluation)
+add_executable(mujoco_ros2_headless
+  src/main_headless.cpp
+)
+
+set_target_properties(mujoco_ros2_headless PROPERTIES
+  INSTALL_RPATH "${MUJOCO_PATH}/lib"
+  BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+target_link_libraries(mujoco_ros2_headless
+  ${MUJOCO_PATH}/lib/libmujoco.so.3.3.7
+  br_driver
+)
+
+ament_target_dependencies(mujoco_ros2_headless
+  rclcpp
+  std_msgs
+  sensor_msgs
+)
+
 install(TARGETS
   mujoco_ros2
+  mujoco_ros2_headless
   DESTINATION lib/${PROJECT_NAME}
 )
 

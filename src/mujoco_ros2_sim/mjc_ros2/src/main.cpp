@@ -502,12 +502,6 @@ void PhysicsLoop(mj::Simulate& sim) {
 
     // run until asked to exit
     while (!sim.exitrequest.load() && !g_shutdown_requested.load() && rclcpp::ok()) {
-    // Auto-shutdown after specified simulation duration
-    if (g_auto_shutdown_duration > 0.0 && d && d->time >= g_auto_shutdown_duration) {
-        std::printf("[MuJoCo] Auto-shutdown: sim time %.1f >= %.1f\n", d->time, g_auto_shutdown_duration);
-        sim.exitrequest.store(true);
-        break;
-    }
     if (sim.droploadrequest.load()) {
         sim.LoadMessage(sim.dropfilename);
         mjModel* mnew = LoadModel(sim.dropfilename, sim);
@@ -744,13 +738,9 @@ void PhysicsThread(mj::Simulate* sim, const char* filename) {
         sim->opt.geomgroup[5] = 1;  // Show group 5 (ghost)
         std::printf("Geom group visualization set to groups 1, 3, and 5.\n");
         
-        // Start simulation (paused by default, auto_start for automation)
-        sim->run = g_auto_start ? 1 : 0;
-        if (g_auto_start) {
-            std::printf("Simulation auto-started (auto_start=true).\n");
-        } else {
-            std::printf("Simulation started in paused state. Press Space to start.\n");
-        }
+        // Start simulation in paused state
+        sim->run = 0;
+        std::printf("Simulation started in paused state. Press Space to start.\n");
   
       } else {
         sim->LoadMessageClear();
@@ -796,11 +786,7 @@ int main(int argc, char** argv) {
     // Declare parameters
     nh->declare_parameter<std::string>("model_file", "");
     nh->declare_parameter<std::vector<std::string>>("joint_names", std::vector<std::string>());
-    nh->declare_parameter<bool>("auto_start", false);
-    nh->declare_parameter<double>("auto_shutdown_duration", 0.0);
     nh->get_parameter("joint_names", joint_names);
-    nh->get_parameter("auto_start", g_auto_start);
-    nh->get_parameter("auto_shutdown_duration", g_auto_shutdown_duration);
 
     // Declare ros Publisher
     // sim_time_pub = nh->create_publisher<std_msgs::msg::Float32>("/p73/mjcSimTime", 10);

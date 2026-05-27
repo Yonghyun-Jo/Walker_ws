@@ -23,10 +23,6 @@ rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr sim_time_pub;
 rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr virtual_state_pub;
 rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr full_state_pub;
 
-// Automation parameters
-static bool g_auto_start = false;
-static double g_auto_shutdown_duration = 0.0;  // 0 = disabled
-
 // Ghost robot: driven by /p73/ghost_state (20D absolute pose)
 static std::mutex ghost_mutex;
 static double ghost_qpos[20] = {0, 0.5, 0.895, 1, 0, 0, 0,

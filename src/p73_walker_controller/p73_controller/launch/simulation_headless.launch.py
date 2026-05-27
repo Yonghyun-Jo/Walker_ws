@@ -13,7 +13,7 @@ simulation_headless.launch.py — GUI 없이 자동화용 MuJoCo 시뮬레이션
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, TimerAction, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, TimerAction, RegisterEventHandler, OpaqueFunction
 from launch.event_handlers import OnProcessStart
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -22,7 +22,8 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 
-def generate_launch_description():
+def _launch_setup(context, *args, **kwargs):
+    """OpaqueFunction to resolve LaunchConfiguration to proper types."""
     p73_description_share = get_package_share_directory('p73_walker_description')
 
     model_file = os.path.join(p73_description_share, 'mujoco', 'p73_walker.xml')
@@ -32,11 +33,12 @@ def generate_launch_description():
     if not os.path.exists(model_file):
         raise FileNotFoundError(f"Model file not found: {model_file}")
 
-    auto_shutdown_duration = LaunchConfiguration('auto_shutdown_duration', default='0.0')
+    # Resolve to proper float (LaunchConfiguration returns string)
+    shutdown_dur = float(LaunchConfiguration('auto_shutdown_duration').perform(context))
 
     mujoco_node = Node(
         package='mjc_ros2',
-        executable='mujoco_ros2',
+        executable='mujoco_ros2_headless',
         name='mujoco_ros2',
         output='screen',
         parameters=[{
@@ -48,8 +50,7 @@ def generate_launch_description():
                 'R_Knee_Joint', 'R_AnklePitch_Joint', 'R_AnkleRoll_Joint',
                 'WaistYaw_Joint',
             ],
-            'auto_start': True,
-            'auto_shutdown_duration': auto_shutdown_duration,
+            'auto_shutdown_duration': shutdown_dur,
         }]
     )
 
@@ -72,9 +73,12 @@ def generate_launch_description():
         )
     )
 
+    return [mujoco_node, delayed_p73_controller_node]
+
+
+def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('auto_shutdown_duration', default_value='0.0',
                               description='Auto-shutdown after N sim seconds (0=disabled)'),
-        mujoco_node,
-        delayed_p73_controller_node,
+        OpaqueFunction(function=_launch_setup),
     ])
