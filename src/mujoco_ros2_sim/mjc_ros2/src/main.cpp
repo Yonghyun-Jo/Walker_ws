@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -97,6 +99,13 @@ void controlCallback(const mjModel* m, mjData* d) {
     std::copy(d->qvel, d->qvel + 3, virtual_state_msgs.data.begin() + 3);
     virtual_state_pub->publish(virtual_state_msgs);
 
+    // Publish full state (qpos) for offscreen recorder
+    if (full_state_pub) {
+        std_msgs::msg::Float64MultiArray full_state_msg;
+        full_state_msg.data.assign(d->qpos, d->qpos + m->nq);
+        full_state_pub->publish(full_state_msg);
+    }
+
     // TODO: this is for future use when shm has been implemented
     // std::copy(d->qpos, d->qpos + 3, joint_status.virtual_position);
     // std::copy(d->qvel, d->qvel + 3, joint_status.virtual_velocity);
@@ -128,6 +137,141 @@ void controlCallback(const mjModel* m, mjData* d) {
 
     // write data to mujoco
     std::copy(joint_command.target_torque, joint_command.target_torque + JOINT_NUM, d->ctrl);
+
+    // ====== External Push via /tmp/p73_push.txt ======
+    // Python writes: "fx fy fz duration_sec\n" → main.cpp reads & applies.
+    // File is deleted after reading. Push clears automatically after duration.
+    // push_active/push_fx/fy/fz are used by contact force logging below.
+    static bool push_active = false;
+    static double push_fx = 0, push_fy = 0, push_fz = 0;
+    {
+        static int base_bid = -2;
+        static double push_end_time = 0;
+
+        // Resolve base body ID once
+        if (base_bid == -2) {
+            base_bid = mj_name2id(m, mjOBJ_BODY, "base_link");
+            if (base_bid < 0)
+                std::printf("[Push] WARNING: base_link not found\n");
+        }
+
+        // Check for new push command (file-based, ~1kHz poll is fine)
+        if (base_bid >= 0 && !push_active) {
+            FILE* fp = fopen("/tmp/p73_push.txt", "r");
+            if (fp) {
+                double fx, fy, fz, dur;
+                if (fscanf(fp, "%lf %lf %lf %lf", &fx, &fy, &fz, &dur) == 4) {
+                    push_fx = fx; push_fy = fy; push_fz = fz;
+                    push_end_time = d->time + dur;
+                    push_active = true;
+                    std::printf("[Push] Applied: [%.1f, %.1f, %.1f] N for %.2f s at t=%.3f\n",
+                                fx, fy, fz, dur, d->time);
+                }
+                fclose(fp);
+                std::remove("/tmp/p73_push.txt");
+            }
+        }
+
+        // Apply or clear push force
+        if (base_bid >= 0) {
+            if (push_active && d->time < push_end_time) {
+                d->xfrc_applied[base_bid * 6 + 0] = push_fx;
+                d->xfrc_applied[base_bid * 6 + 1] = push_fy;
+                d->xfrc_applied[base_bid * 6 + 2] = push_fz;
+            } else {
+                if (push_active) {
+                    std::printf("[Push] Cleared at t=%.3f\n", d->time);
+                    push_active = false;
+                }
+                d->xfrc_applied[base_bid * 6 + 0] = 0;
+                d->xfrc_applied[base_bid * 6 + 1] = 0;
+                d->xfrc_applied[base_bid * 6 + 2] = 0;
+            }
+        }
+    }
+
+    // ====== Contact Force Logging (simulation only) ======
+    // Logs L/R foot contact forces to logs/contact_force_*.csv.
+    // Starts from MuJoCo launch (d->time >= 0.1s to skip transients).
+    // Time axis uses d->time — analyze_results.py handles alignment
+    // with cc.cpp's mujoco_*.csv via time-overlap matching.
+    {
+        static std::ofstream cf_log;
+        static bool cf_init = false;
+        static int cf_flush_cnt = 0;
+        static int l_foot_bid = -1;
+        static int r_foot_bid = -1;
+
+        if (!cf_init) {
+            l_foot_bid = mj_name2id(m, mjOBJ_BODY, "L_Foot_Link");
+            r_foot_bid = mj_name2id(m, mjOBJ_BODY, "R_Foot_Link");
+
+            if (l_foot_bid >= 0 && r_foot_bid >= 0) {
+                std::string log_dir = std::string(getenv("HOME")) + "/ros2_ws/src/p73_cc/logs";
+                auto now = std::chrono::system_clock::now();
+                auto t_now = std::chrono::system_clock::to_time_t(now);
+                std::tm tm_buf;
+                localtime_r(&t_now, &tm_buf);
+                char ts[32];
+                std::strftime(ts, sizeof(ts), "%y%m%d_%H%M%S", &tm_buf);
+                std::string path = log_dir + "/contact_force_" + std::string(ts) + ".csv";
+
+                cf_log.open(path, std::ios::out);
+                cf_log << std::fixed << std::setprecision(8);
+                cf_log << "time"
+                       << ",foot_force_lx,foot_force_ly,foot_force_lz"
+                       << ",foot_force_rx,foot_force_ry,foot_force_rz"
+                       << ",push_active,push_fx,push_fy,push_fz"
+                       << "\n";
+                std::printf("[ContactForce] Logging to: %s\n", path.c_str());
+            }
+            cf_init = true;
+        }
+
+        if (cf_log.is_open()) {
+            cf_log << d->time
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 3]
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 4]
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 5]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 3]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 4]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 5]
+                   << "," << (push_active ? 1 : 0)
+                   << "," << (push_active ? push_fx : 0.0)
+                   << "," << (push_active ? push_fy : 0.0)
+                   << "," << (push_active ? push_fz : 0.0)
+                   << "\n";
+
+            if (++cf_flush_cnt % 100 == 0) cf_log.flush();
+        }
+    }
+
+    // ====== Ghost robot: set qpos from /p73/ghost_state (20D absolute pose) ======
+    {
+        static int ghost_jid = -2;
+        static int ghost_qadr = -1;
+        static int ghost_vadr = -1;
+
+        if (ghost_jid == -2) {
+            ghost_jid = mj_name2id(m, mjOBJ_JOINT, "ghost_world_to_base");
+            if (ghost_jid >= 0) {
+                ghost_qadr = m->jnt_qposadr[ghost_jid];
+                ghost_vadr = m->jnt_dofadr[ghost_jid];
+                std::printf("[Ghost] Found ghost_world_to_base: qpos_adr=%d, qvel_adr=%d\n",
+                            ghost_qadr, ghost_vadr);
+            } else {
+                std::printf("[Ghost] ghost_world_to_base not found in model\n");
+            }
+        }
+
+        if (ghost_jid >= 0) {
+            std::lock_guard<std::mutex> lock(ghost_mutex);
+            // Always set ghost qpos to prevent gravity fall-through
+            // (ghost_qpos holds standing pose by default, updated by /p73/ghost_state)
+            std::copy(ghost_qpos, ghost_qpos + 20, d->qpos + ghost_qadr);
+            std::fill(d->qvel + ghost_vadr, d->qvel + ghost_vadr + 19, 0.0);
+        }
+    }
 }
 
 
@@ -358,6 +502,12 @@ void PhysicsLoop(mj::Simulate& sim) {
 
     // run until asked to exit
     while (!sim.exitrequest.load() && !g_shutdown_requested.load() && rclcpp::ok()) {
+    // Auto-shutdown after specified simulation duration
+    if (g_auto_shutdown_duration > 0.0 && d && d->time >= g_auto_shutdown_duration) {
+        std::printf("[MuJoCo] Auto-shutdown: sim time %.1f >= %.1f\n", d->time, g_auto_shutdown_duration);
+        sim.exitrequest.store(true);
+        break;
+    }
     if (sim.droploadrequest.load()) {
         sim.LoadMessage(sim.dropfilename);
         mjModel* mnew = LoadModel(sim.dropfilename, sim);
@@ -391,7 +541,8 @@ void PhysicsLoop(mj::Simulate& sim) {
         }
         sim.opt.geomgroup[1] = 1;
         sim.opt.geomgroup[3] = 1;
-        
+        sim.opt.geomgroup[5] = 1;  // Ghost
+
         mj_forward(m, d);
 
         } else {
@@ -431,7 +582,8 @@ void PhysicsLoop(mj::Simulate& sim) {
         }
         sim.opt.geomgroup[1] = 1;
         sim.opt.geomgroup[3] = 1;
-        
+        sim.opt.geomgroup[5] = 1;  // Ghost
+
         mj_forward(m, d);
 
         } else {
@@ -589,11 +741,16 @@ void PhysicsThread(mj::Simulate* sim, const char* filename) {
         }
         sim->opt.geomgroup[1] = 1;  // Show group 1
         sim->opt.geomgroup[3] = 1;  // Show group 3
-        std::printf("Geom group visualization set to groups 1 and 3 only.\n");
+        sim->opt.geomgroup[5] = 1;  // Show group 5 (ghost)
+        std::printf("Geom group visualization set to groups 1, 3, and 5.\n");
         
-        // Start simulation in paused state
-        sim->run = 0;
-        std::printf("Simulation started in paused state. Press Space to start.\n");
+        // Start simulation (paused by default, auto_start for automation)
+        sim->run = g_auto_start ? 1 : 0;
+        if (g_auto_start) {
+            std::printf("Simulation auto-started (auto_start=true).\n");
+        } else {
+            std::printf("Simulation started in paused state. Press Space to start.\n");
+        }
   
       } else {
         sim->LoadMessageClear();
@@ -639,11 +796,29 @@ int main(int argc, char** argv) {
     // Declare parameters
     nh->declare_parameter<std::string>("model_file", "");
     nh->declare_parameter<std::vector<std::string>>("joint_names", std::vector<std::string>());
+    nh->declare_parameter<bool>("auto_start", false);
+    nh->declare_parameter<double>("auto_shutdown_duration", 0.0);
     nh->get_parameter("joint_names", joint_names);
+    nh->get_parameter("auto_start", g_auto_start);
+    nh->get_parameter("auto_shutdown_duration", g_auto_shutdown_duration);
 
     // Declare ros Publisher
     // sim_time_pub = nh->create_publisher<std_msgs::msg::Float32>("/p73/mjcSimTime", 10);
     virtual_state_pub = nh->create_publisher<std_msgs::msg::Float64MultiArray>("/p73/mjcVirtualState", 10);
+    full_state_pub = nh->create_publisher<std_msgs::msg::Float64MultiArray>("/mujoco/full_state", 10);
+
+    // Ghost state subscriber: 20D = [pos(3) + quat_wxyz(4) + joints(13)]
+    // Published by motion_cmd_publisher.py alongside /p73/motion_cmd
+    ghost_state_sub = nh->create_subscription<std_msgs::msg::Float64MultiArray>(
+        "/p73/ghost_state", 10,
+        [](const std_msgs::msg::Float64MultiArray::SharedPtr msg) {
+            if (msg->data.size() >= 20) {
+                std::lock_guard<std::mutex> lock(ghost_mutex);
+                for (int i = 0; i < 20; i++)
+                    ghost_qpos[i] = msg->data[i];
+                ghost_state_received = true;
+            }
+        });
 
     std::printf("MuJoCo version %s\n", mj_versionString());
     if (mjVERSION_HEADER!=mj_version()) {
@@ -717,6 +892,9 @@ int main(int argc, char** argv) {
     mjcb_control = controlCallback;
     std::printf("Control callback registered for shared memory updates\n");
 
+    // start ROS2 spin thread (for ghost_state subscriber callbacks)
+    std::thread ros_spin_thread([nh]() { rclcpp::spin(nh); });
+
     // start physics thread
     std::thread physicsthreadhandle(&PhysicsThread, sim.get(), model_file_cstr);
 
@@ -724,6 +902,7 @@ int main(int argc, char** argv) {
     sim->RenderLoop();
     physicsthreadhandle.join();
     rclcpp::shutdown();
+    if (ros_spin_thread.joinable()) ros_spin_thread.join();
     
     ////////////////////////////////////////////
     // Cleanup

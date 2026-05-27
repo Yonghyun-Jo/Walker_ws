@@ -2,9 +2,9 @@
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-from launch.actions import TimerAction, RegisterEventHandler
+from launch.actions import ExecuteProcess, TimerAction, RegisterEventHandler
 from launch.event_handlers import OnProcessStart
+from ament_index_python.packages import get_package_share_directory
 
 import os
 
@@ -12,19 +12,19 @@ import os
 def generate_launch_description():
     # Get package directories
     p73_description_share = get_package_share_directory('p73_walker_description')
- 
+
     # Model file path
     model_file = os.path.join(p73_description_share, 'mujoco', 'p73_walker.xml')
     urdf_path = os.path.join(p73_description_share, 'urdf', 'p73_walker.urdf')
 
     setting_sim_PDgain_path = os.path.join(p73_description_share, 'setting', 'setting_sim_PDgain.yaml')
-    
+
     #check if the model file exists
     if not os.path.exists(model_file):
         raise FileNotFoundError(f"Model file not found: {model_file}")
     if not os.path.exists(urdf_path):
         raise FileNotFoundError(f"URDF file not found: {urdf_path}")
-    
+
     # MuJoCo ROS2 node
     mujoco_node = Node(
         package='mjc_ros2',
@@ -38,7 +38,7 @@ def generate_launch_description():
                             'WaistYaw_Joint']
         }]
     )
-    
+
     # P73 Controller node
     p73_controller_node = Node(
         package='p73_controller',
@@ -64,6 +64,14 @@ def generate_launch_description():
         arguments=['--force-discover', '--standalone', 'p73_gui/P73Gui']
     )
 
+    # Motion Control GUI (PyQt5, auto-starts ghost + motion_cmd publishing)
+    motion_gui_script = os.path.expanduser('~/ros2_ws/src/p73_cc/scripts/motion_gui.py')
+    motion_gui_node = ExecuteProcess(
+        cmd=['/usr/bin/python3', motion_gui_script],
+        name='motion_gui',
+        output='screen',
+    )
+
     delayed_p73_controller_node = RegisterEventHandler(
         OnProcessStart(
             target_action=mujoco_node,
@@ -75,5 +83,6 @@ def generate_launch_description():
         mujoco_node,
         delayed_p73_controller_node,
         p73_gui_node,
+        motion_gui_node,
     ])
 
