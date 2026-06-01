@@ -1,0 +1,2 @@
+/usr/bin/ar qc libp73_controller_lib.a CMakeFiles/p73_controller_lib.dir/src/state_estimator.cpp.o CMakeFiles/p73_controller_lib.dir/src/p73_controller.cpp.o
+/usr/bin/ranlib libp73_controller_lib.a

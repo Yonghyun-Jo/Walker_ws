@@ -1,0 +1,97 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-5b99784aa80e3ea1ec27.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.15"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "p73_controller",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_controller::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_controller-67c807f62c06952e8e65.json",
+					"name" : "p73_controller",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_controller_lib::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_controller_lib-5ac1010b289d7d5f03c8.json",
+					"name" : "p73_controller_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_controller_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_controller_uninstall-4e671d776a2d6bd60aa2.json",
+					"name" : "p73_controller_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "shm_reset::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-shm_reset-c158e641dd2f88f54a04.json",
+					"name" : "shm_reset",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-53c6f45892a52c5010a5.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/piene/ros2_ws/build_motion/p73_controller",
+		"source" : "/home/piene/ros2_ws/src/p73_walker_controller/p73_controller"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

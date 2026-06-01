@@ -1,0 +1,39 @@
+#ifndef WBF_H
+#define WBF_H
+
+#include "p73_lib/robot_data.h"
+#include "p73_lib/4bar_jac_func.h"
+
+using namespace P73;
+
+namespace WBC
+{
+    //--- Contact
+    void SetContactInit(RobotEigenData &rd_);
+    void SetTrajectoryInit(RobotEigenData &rd_);
+    void SetContact(RobotEigenData &Robot, bool left_foot, bool right_foot);
+    void ContactCalcDefault(RobotEigenData &Robot);
+
+    void CalcContact(RobotEigenData &rd_);
+
+    //---Whole-body Dynamics Controller
+    VectorQd GravityCompensationTorque(RobotEigenData &rd_);
+    VectorQd ContactForceFrictionConeConstraintTorque(RobotEigenData &rd_, Eigen::VectorQd command_torque);
+    void FrictionCompensationTorques(RobotEigenData& rd_);
+    void FrictionCompensationTorques(RobotEigenData& rd_, const Eigen::VectorQd &q_dot);
+
+    //---Whole-body Inverse Kinematics Controller
+    void NullspaceInverseKinematics(RobotEigenData &rd_);
+
+    //--- Mapping
+    VectorQd JointTorqueToMotorTorque(RobotEigenData& rd_, const Eigen::VectorQd& torque_joint);
+    VectorQd JointPositionToMotorTorque(RobotEigenData& rd_);
+
+    //--- Utility
+    void loadActuatorNetModels();
+    Vector12d inferActuatorTorqueFromNet(RobotEigenData& rd_, double elapsed_time);
+
+    void CheckTorqueLimit(RobotEigenData &rd_, VectorQd command_torque);
+}
+
+#endif

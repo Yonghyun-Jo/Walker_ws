@@ -1,0 +1,6 @@
+msg/IKTaskCmd.idl
+msg/IKTaskCmd.msg
+msg/PosCmd.idl
+msg/PosCmd.msg
+msg/TaskCmd.idl
+msg/TaskCmd.msg

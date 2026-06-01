@@ -11,6 +11,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -87,6 +89,45 @@ void controlCallback(const mjModel* m, mjData* d) {
 
     // Write torque to MuJoCo
     std::copy(joint_command.target_torque, joint_command.target_torque + JOINT_NUM, d->ctrl);
+
+    // Contact force logging (same as main.cpp)
+    {
+        static std::ofstream cf_log;
+        static bool cf_init = false;
+        static int cf_flush_cnt = 0;
+        static int l_foot_bid = -1, r_foot_bid = -1;
+
+        if (!cf_init) {
+            l_foot_bid = mj_name2id(m, mjOBJ_BODY, "L_Foot_Link");
+            r_foot_bid = mj_name2id(m, mjOBJ_BODY, "R_Foot_Link");
+            if (l_foot_bid >= 0 && r_foot_bid >= 0) {
+                std::string log_dir = std::string(getenv("HOME")) + "/ros2_ws/src/p73_cc/logs";
+                auto now = std::chrono::system_clock::now();
+                auto t_now = std::chrono::system_clock::to_time_t(now);
+                std::tm tm_buf;
+                localtime_r(&t_now, &tm_buf);
+                char ts[32];
+                std::strftime(ts, sizeof(ts), "%y%m%d_%H%M%S", &tm_buf);
+                std::string path = log_dir + "/contact_force_" + std::string(ts) + ".csv";
+                cf_log.open(path, std::ios::out);
+                cf_log << std::fixed << std::setprecision(8)
+                       << "time,foot_force_lx,foot_force_ly,foot_force_lz"
+                       << ",foot_force_rx,foot_force_ry,foot_force_rz\n";
+                std::printf("[Headless] Contact force logging: %s\n", path.c_str());
+            }
+            cf_init = true;
+        }
+        if (cf_log.is_open()) {
+            cf_log << d->time
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 3]
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 4]
+                   << "," << d->cfrc_ext[l_foot_bid * 6 + 5]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 3]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 4]
+                   << "," << d->cfrc_ext[r_foot_bid * 6 + 5] << "\n";
+            if (++cf_flush_cnt % 100 == 0) cf_log.flush();
+        }
+    }
 
     // Ghost robot (if present)
     {

@@ -4,3 +4,5 @@ log/
 *.pyc
 __pycache__/
 md_files/
+
+CLAUDE.md

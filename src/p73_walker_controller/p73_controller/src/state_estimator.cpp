@@ -759,6 +759,10 @@ void StateEstimator::StoreState(RobotEigenData &rd_global_)
     memcpy(&rd_global_.q_virtual_, &q_virtual_, sizeof(VectorQVQd));
     memcpy(&rd_global_.q_dot_virtual_, &q_dot_virtual_, sizeof(VectorVQd));
 
+    if (dc_.simMode) {
+        rd_global_.q_dot_virtual_.segment(0, 3) = q_dot_virtual_mjc_;
+    }
+
     rd_global_.roll = rd_.roll;
     rd_global_.pitch = rd_.pitch;
     rd_global_.yaw = rd_.yaw;

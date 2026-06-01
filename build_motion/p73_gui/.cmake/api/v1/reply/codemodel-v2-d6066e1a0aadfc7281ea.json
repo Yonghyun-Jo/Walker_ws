@@ -1,0 +1,97 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-1ed2eba274402b2e4f99.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.15"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "p73_gui",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_gui_plugin::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_gui_plugin-ab1b83e41ccf74da99ad.json",
+					"name" : "p73_gui_plugin",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_gui_plugin_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_gui_plugin_autogen-dcfeb555b2c048265b7f.json",
+					"name" : "p73_gui_plugin_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_gui_plugin_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_gui_plugin_autogen_timestamp_deps-85ed3c0102a3a45f0de6.json",
+					"name" : "p73_gui_plugin_autogen_timestamp_deps",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_gui_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_gui_uninstall-c7a8b0ac6f10bfe98071.json",
+					"name" : "p73_gui_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-73484410c1b6cf449380.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/piene/ros2_ws/build_motion/p73_gui",
+		"source" : "/home/piene/ros2_ws/src/p73_walker_gui"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

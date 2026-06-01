@@ -1,0 +1,4 @@
+source;share/p73_cc/local_setup.bash
+source;share/p73_cc/local_setup.dsv
+source;share/p73_cc/local_setup.sh
+source;share/p73_cc/local_setup.zsh

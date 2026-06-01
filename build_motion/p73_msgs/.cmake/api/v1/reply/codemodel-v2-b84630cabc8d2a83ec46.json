@@ -1,0 +1,242 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-14e2ce88085460523dcc.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.20"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18
+					]
+				},
+				{
+					"build" : "p73_msgs__py",
+					"jsonFile" : "directory-p73_msgs__py-0520d956fc49f16a62c7.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.20"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "/home/piene/ros2_ws/build_motion/p73_msgs/p73_msgs__py",
+					"targetIndexes" : 
+					[
+						4
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1
+					],
+					"name" : "p73_msgs",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_build_p73_msgs_egg::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_build_p73_msgs_egg-7142e134f2c3f0773eff.json",
+					"name" : "ament_cmake_python_build_p73_msgs_egg",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_copy_p73_msgs::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_copy_p73_msgs-83f7b23f99b0885ae2ca.json",
+					"name" : "ament_cmake_python_copy_p73_msgs",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs-593f06a79ef0aad5ef37.json",
+					"name" : "p73_msgs",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__cpp-4163c9d6d811e3ad268d.json",
+					"name" : "p73_msgs__cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "p73_msgs__py::@69c184f621fbcdbfabd3",
+					"jsonFile" : "target-p73_msgs__py-95b2e561c9755e9a1e39.json",
+					"name" : "p73_msgs__py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_generator_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_generator_c-bb5adf41bac0470d891f.json",
+					"name" : "p73_msgs__rosidl_generator_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_generator_py::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_generator_py-1d5e3fa9be30b809a926.json",
+					"name" : "p73_msgs__rosidl_generator_py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_generator_type_description::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_generator_type_description-dd984cc9f4854aa8d84a.json",
+					"name" : "p73_msgs__rosidl_generator_type_description",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_c-3bca6af95ad19a52ad01.json",
+					"name" : "p73_msgs__rosidl_typesupport_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_cpp-a4ac532d0dbc30c37239.json",
+					"name" : "p73_msgs__rosidl_typesupport_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_fastrtps_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_fastrtps_c-42eaae8d16599cd80793.json",
+					"name" : "p73_msgs__rosidl_typesupport_fastrtps_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_fastrtps_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_fastrtps_cpp-50c42a5a771e0efd43f5.json",
+					"name" : "p73_msgs__rosidl_typesupport_fastrtps_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_introspection_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_introspection_c-efd5397c5e2b06d1212d.json",
+					"name" : "p73_msgs__rosidl_typesupport_introspection_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs__rosidl_typesupport_introspection_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs__rosidl_typesupport_introspection_cpp-dbd47252500e8c28fade.json",
+					"name" : "p73_msgs__rosidl_typesupport_introspection_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs_s__rosidl_typesupport_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs_s__rosidl_typesupport_c-fe82955a27301b7633f1.json",
+					"name" : "p73_msgs_s__rosidl_typesupport_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs_s__rosidl_typesupport_fastrtps_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs_s__rosidl_typesupport_fastrtps_c-0db026369118228fe389.json",
+					"name" : "p73_msgs_s__rosidl_typesupport_fastrtps_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs_s__rosidl_typesupport_introspection_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs_s__rosidl_typesupport_introspection_c-002e613347e8c0529d11.json",
+					"name" : "p73_msgs_s__rosidl_typesupport_introspection_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "p73_msgs_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-p73_msgs_uninstall-131b2e40349d89125cf8.json",
+					"name" : "p73_msgs_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-3ca5e23a9021291186c1.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/piene/ros2_ws/build_motion/p73_msgs",
+		"source" : "/home/piene/ros2_ws/src/p73_walker_controller/p73_msgs"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

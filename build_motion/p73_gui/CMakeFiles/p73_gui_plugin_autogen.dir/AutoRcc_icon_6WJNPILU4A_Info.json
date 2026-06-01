@@ -1,0 +1,25 @@
+{
+	"BUILD_DIR" : "/home/piene/ros2_ws/build_motion/p73_gui/p73_gui_plugin_autogen",
+	"CMAKE_BINARY_DIR" : "/home/piene/ros2_ws/build_motion/p73_gui",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/piene/ros2_ws/build_motion/p73_gui",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/piene/ros2_ws/src/p73_walker_gui",
+	"CMAKE_SOURCE_DIR" : "/home/piene/ros2_ws/src/p73_walker_gui",
+	"GENERATOR" : "Unix Makefiles",
+	"INCLUDE_DIR" : "/home/piene/ros2_ws/build_motion/p73_gui/p73_gui_plugin_autogen/include",
+	"INPUTS" : 
+	[
+		"/home/piene/ros2_ws/src/p73_walker_gui/resource/p73_cute.png",
+		"/home/piene/ros2_ws/src/p73_walker_gui/resource/p73.jpeg",
+		"/home/piene/ros2_ws/src/p73_walker_gui/resource/p73_.png"
+	],
+	"LOCK_FILE" : "/home/piene/ros2_ws/build_motion/p73_gui/CMakeFiles/p73_gui_plugin_autogen.dir/AutoRcc_icon_6WJNPILU4A_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "icon" ],
+	"OUTPUT_CHECKSUM" : "6WJNPILU4A",
+	"OUTPUT_NAME" : "qrc_icon.cpp",
+	"RCC_EXECUTABLE" : "/usr/lib/qt5/bin/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/home/piene/ros2_ws/build_motion/p73_gui/CMakeFiles/p73_gui_plugin_autogen.dir/AutoRcc_icon_6WJNPILU4A_Used.txt",
+	"SOURCE" : "/home/piene/ros2_ws/src/p73_walker_gui/resource/icon.qrc",
+	"VERBOSITY" : 0
+}

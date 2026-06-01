@@ -1,0 +1,8 @@
+{
+  "package_name": "p73_msgs",
+  "non_idl_tuples": [
+    "/home/piene/ros2_ws/src/p73_walker_controller/p73_msgs:msg/TaskCmd.msg",
+    "/home/piene/ros2_ws/src/p73_walker_controller/p73_msgs:msg/PosCmd.msg",
+    "/home/piene/ros2_ws/src/p73_walker_controller/p73_msgs:msg/IKTaskCmd.msg"
+  ]
+}

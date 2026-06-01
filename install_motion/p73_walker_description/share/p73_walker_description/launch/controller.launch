@@ -1,0 +1,9 @@
+<launch>
+
+<rosparam file="$(find p73_walker_description)/launch/controller.yaml" command="load"/>
+<node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" ns="p73" args="WaistYaw_Joint_position_controller R_HipRoll_Joint_position_controller L_HipRoll_Joint_position_controller R_HipPitch_Joint_position_controller L_HipPitch_Joint_position_controller R_HipYaw_Joint_position_controller L_HipYaw_Joint_position_controller R_Knee_Joint_position_controller L_Knee_Joint_position_controller L_AnklePitch_Joint_position_controller R_AnklePitch_Joint_position_controller L_AnkleRoll_Joint_position_controller R_AnkleRoll_Joint_position_controller joint_state_controller "/>
+<node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen">
+  <remap from="/joint_states" to="/p73/joint_states"/>
+</node>
+
+</launch>

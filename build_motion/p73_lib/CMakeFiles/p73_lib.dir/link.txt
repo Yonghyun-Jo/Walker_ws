@@ -1,0 +1,2 @@
+/usr/bin/ar qc libp73_lib.a CMakeFiles/p73_lib.dir/src/link.cpp.o CMakeFiles/p73_lib.dir/src/wholebody_functions.cpp.o CMakeFiles/p73_lib.dir/src/4bar_jac_func.cpp.o
+/usr/bin/ranlib libp73_lib.a

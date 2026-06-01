@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix=":/icons">
+    <file>p73_cute.png</file>
+    <file>p73.jpeg</file>
+    <file>p73_.png</file>
+  </qresource>
+</RCC>

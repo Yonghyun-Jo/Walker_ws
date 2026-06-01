@@ -1,0 +1,2 @@
+/usr/bin/ar qc libp73_cc.a CMakeFiles/p73_cc.dir/src/cc.cpp.o
+/usr/bin/ranlib libp73_cc.a
