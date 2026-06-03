@@ -4,3 +4,7 @@ p73_msgs.egg-info/PKG-INFO
 p73_msgs.egg-info/SOURCES.txt
 p73_msgs.egg-info/dependency_links.txt
 p73_msgs.egg-info/top_level.txt
+p73_msgs/msg/__init__.py
+p73_msgs/msg/_ik_task_cmd.py
+p73_msgs/msg/_pos_cmd.py
+p73_msgs/msg/_task_cmd.py

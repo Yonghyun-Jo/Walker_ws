@@ -15,6 +15,7 @@
 /home/piene/ros2_ws/install_motion/p73_cc/include/onnxruntime_cxx_inline.h
 /home/piene/ros2_ws/install_motion/p73_cc/include/onnxruntime_lite_custom_op.h
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/policy.onnx
+/home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-29_00-28-31_ds3_cfl30_sym20_atv25_sc140_curr/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-20_01-21-17/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-20_01-21-17/data/raw_v1_20260520_132132.csv
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-20_01-21-17/data/report_v1_20260520_132132.md
@@ -26,12 +27,14 @@
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/archive/2026-05-26_00-21-30(4000,0)/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/archive/2026-05-25_14-42-30(5000,0.3)/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-29_00-29-14_ds3_cfl15_sym20_atv25_sc140_fresh/policy.onnx
+/home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/policy_base.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-09_10-50-54/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-30_00-55-22_latent_norm_cfl30_curr/policy.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/sessions/260601/session.yaml
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/sessions/260601/1_latent_norm_cfl30_curr_26599.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/sessions/260601/2_student_waist13_t7500_25000.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/2026-05-21_23-15-53/policy.onnx
+/home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/policy/policy_vq.onnx
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/launch/joy_teleop_local.launch.py
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/launch/joy_teleop_udp.launch.py
 /home/piene/ros2_ws/install_motion/p73_cc/share/p73_cc/config/fastdds_unicast.xml

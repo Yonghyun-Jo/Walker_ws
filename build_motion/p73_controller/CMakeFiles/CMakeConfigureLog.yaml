@@ -570,3 +570,48 @@ events:
         201703
       exitCode: 0
 ...
+
+---
+events:
+  -
+    kind: "try_run-v1"
+    backtrace:
+      - "/opt/ros/jazzy/lib/x86_64-linux-gnu/cmake/eigenpy/cxx-standard.cmake:62 (try_run)"
+      - "/opt/ros/jazzy/lib/x86_64-linux-gnu/cmake/eigenpy/eigenpyConfig.cmake:196 (CHECK_MINIMAL_CXX_STANDARD)"
+      - "/usr/share/cmake-3.28/Modules/CMakeFindDependencyMacro.cmake:76 (find_package)"
+      - "/opt/ros/jazzy/lib/x86_64-linux-gnu/cmake/pinocchio/pinocchioConfig.cmake:161 (find_dependency)"
+      - "/home/piene/ros2_ws/install_motion/p73_lib/share/p73_lib/cmake/ament_cmake_export_dependencies-extras.cmake:21 (find_package)"
+      - "/home/piene/ros2_ws/install_motion/p73_lib/share/p73_lib/cmake/p73_libConfig.cmake:41 (include)"
+      - "CMakeLists.txt:21 (find_package)"
+    directories:
+      source: "/home/piene/ros2_ws/build_motion/p73_controller/CMakeFiles/CMakeTmp"
+      binary: "/home/piene/ros2_ws/build_motion/p73_controller/CMakeFiles/CMakeTmp"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "/opt/ros/jazzy/share/fastrtps_cmake_module/cmake/Modules"
+    buildResult:
+      variable: "_cxx_standard_build_status"
+      cached: true
+      stdout: |
+        Change Dir: '/home/piene/ros2_ws/build_motion/p73_controller/CMakeFiles/CMakeTmp'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_ea039/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_ea039.dir/build.make CMakeFiles/cmTC_ea039.dir/build
+        gmake[1]: Entering directory '/home/piene/ros2_ws/build_motion/p73_controller/CMakeFiles/CMakeTmp'
+        Building CXX object CMakeFiles/cmTC_ea039.dir/tmp-cxx-standard.cpp.o
+        /usr/bin/c++   -std=gnu++17 -o CMakeFiles/cmTC_ea039.dir/tmp-cxx-standard.cpp.o -c /home/piene/ros2_ws/build_motion/p73_controller/cmake/tmp-cxx-standard.cpp
+        Linking CXX executable cmTC_ea039
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_ea039.dir/link.txt --verbose=1
+        /usr/bin/c++ "CMakeFiles/cmTC_ea039.dir/tmp-cxx-standard.cpp.o" -o cmTC_ea039 
+        gmake[1]: Leaving directory '/home/piene/ros2_ws/build_motion/p73_controller/CMakeFiles/CMakeTmp'
+        
+      exitCode: 0
+    runResult:
+      variable: "_cxx_standard_run_status"
+      cached: true
+      stdout: |
+        201703
+      exitCode: 0
+...
