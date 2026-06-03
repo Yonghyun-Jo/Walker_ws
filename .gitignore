@@ -1,5 +1,7 @@
 build/
+build_motion/
 install/
+install_motion/
 log/
 *.pyc
 __pycache__/

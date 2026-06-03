@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/shm_reset.dir/src/shm_reset.cpp.o -o shm_reset  -lbr_driver 
