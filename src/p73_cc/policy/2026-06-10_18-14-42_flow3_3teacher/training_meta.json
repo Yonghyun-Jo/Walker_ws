@@ -1,0 +1,10 @@
+{
+  "commit": "66d0bd33fd378f965bdfdee9c036171965554f14",
+  "branch": "beyondmimic_reward",
+  "status_porcelain": "",
+  "diff": "",
+  "diff_too_large": false,
+  "captured_at": "2026-06-10T18:14:52.800078",
+  "captured_from": "train_monitor",
+  "ws_path_at_capture": "/home/piene/isaaclab5.2/isaaclab_walker_vision"
+}

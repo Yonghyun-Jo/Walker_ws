@@ -360,21 +360,11 @@ class MotionNode(Node):
 
         self.cc_mode_activated = False  # set by callback, read by GUI
 
-        # sim_time from MuJoCo (None = real robot / no MuJoCo)
-        self.sim_time = None
-        self._sim_time_prev = None
-        self._sim_time_advancing = False
-        self._sim_time_sub = self.create_subscription(
-            Float64MultiArray, "/mujoco/full_state", self._on_full_state, 10)
-
-    def _on_full_state(self, msg):
-        if len(msg.data) > 0:
-            new_t = msg.data[-1]
-            if self.sim_time is not None and new_t > self.sim_time + 1e-4:
-                self._sim_time_advancing = True
-            elif self.sim_time is not None and abs(new_t - self.sim_time) < 1e-4:
-                self._sim_time_advancing = False
-            self.sim_time = new_t
+        # NOTE: motion playback is paced by wall-clock (50Hz tick). A previous
+        # version paced on /mujoco/full_state[-1] as if it were sim_time, but
+        # full_state carries qpos only (last element = a joint angle), so the
+        # ghost frame was driven by an oscillating joint -> violent vibration.
+        # The mujoco viewer runs real-time, so wall-clock == sim time here.
 
     def _task_cb(self, msg):
         if 5 <= msg.task_mode < 10:
@@ -411,8 +401,7 @@ class MotionGuiWindow(QWidget):
         self.node = node
         self.playlist = Playlist()
         self.playing = False
-        self.elapsed = 0.0          # global playlist time (s)
-        self._sim_time_baseline = 0.0
+        self.elapsed = 0.0          # global playlist time (s), wall-clock paced
         self.policy_dt = 0.02       # 50Hz, matches IsaacLab decimation
         self._slider_pressed = False
         self._cur_motion_idx = 0
@@ -603,8 +592,6 @@ class MotionGuiWindow(QWidget):
     def _on_play(self):
         if self.playlist.is_empty():
             return
-        if not self.playing and self.node.sim_time is not None:
-            self._sim_time_baseline = self.node.sim_time - self.elapsed
         self.playing = True
 
     def _on_pause(self):
@@ -623,8 +610,6 @@ class MotionGuiWindow(QWidget):
     def _slider_release(self):
         self._slider_pressed = False
         self.elapsed = self.slider.value() * self.policy_dt
-        if self.node.sim_time is not None:
-            self._sim_time_baseline = self.node.sim_time - self.elapsed
 
     def _slider_changed(self, val):
         if self._slider_pressed:
@@ -645,21 +630,13 @@ class MotionGuiWindow(QWidget):
         if self.chk_auto.isChecked() and self.node.cc_mode_activated:
             self.node.cc_mode_activated = False
             self.elapsed = 0.0
-            self._sim_time_baseline = self.node.sim_time if self.node.sim_time is not None else 0.0
             self.playing = True
-            use_sim = self.node.sim_time is not None
             self.node.get_logger().info(
-                f"CC mode detected — auto-starting playlist ({len(self.playlist.items)} motions, "
-                f"{'sim_time' if use_sim else 'wall-clock'} paced)")
+                f"CC mode detected — auto-starting playlist "
+                f"({len(self.playlist.items)} motions, wall-clock paced)")
 
         if self.playing:
-            use_sim = self.node.sim_time is not None and self.node._sim_time_advancing
-            if use_sim:
-                self.elapsed = self.node.sim_time - self._sim_time_baseline
-            else:
-                self.elapsed += self.policy_dt
-                if self.node.sim_time is not None:
-                    self._sim_time_baseline = self.node.sim_time - self.elapsed
+            self.elapsed += self.policy_dt
             if not loop and self.elapsed >= self.playlist.total_time(loop):
                 self.elapsed = self.playlist.total_time(loop)
                 self.playing = False
@@ -694,8 +671,6 @@ class MotionGuiWindow(QWidget):
         loop = self.chk_loop.isChecked()
         total = self.playlist.total_time(loop)
         state = "Playing" if self.playing else "Stopped"
-        use_sim = self.node.sim_time is not None and self.node._sim_time_advancing
-        clock = "sim" if use_sim else "wall"
         n = len(self.playlist.items)
         if self._in_transition:
             seg = f"→ blending into #{self._cur_motion_idx + 1}/{n}"
@@ -703,7 +678,7 @@ class MotionGuiWindow(QWidget):
             m = self.playlist.items[self._cur_motion_idx]
             seg = f"#{self._cur_motion_idx + 1}/{n} {m.name}  f{self._cur_frame}/{m.num_frames}"
         self.lbl_status.setText(
-            f"{state} [{clock}]  |  {seg}  |  {self.elapsed:.1f}s / {total:.1f}s")
+            f"{state}  |  {seg}  |  {self.elapsed:.1f}s / {total:.1f}s")
 
 
 # ── Main ────────────────────────────────────────────────────────────
